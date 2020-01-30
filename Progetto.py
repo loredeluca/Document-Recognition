@@ -11,8 +11,8 @@ import sklearn.preprocessing
 
 #img = cv.imread("N0024670aao.tif")  #Leggo l'immagine 
 
-img = cv.imread("skew.tif")
-img_char,img_word = img.copy(),img.copy()  
+img = cv.imread("N0024670aas.tif")
+img_word = img.copy() 
 img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
 bin_otsu = sklearn.preprocessing.binarize(img_gray, threshold_otsu(img_gray))
@@ -46,7 +46,7 @@ def showImage(text_name, file_name):
 showImage('Original Image',img)
 showImage('Otsu Binarization',bin_otsu*255)
 
-bin_sauvola = cv.medianBlur(bin_sauvola, 5) #apply median blur to remove black spots on image
+bin_sauvola = cv.medianBlur(bin_sauvola, 3) #apply median blur to remove black spots on image
 
 showImage('Sauvola Binarization', bin_sauvola*255)
 
@@ -58,19 +58,29 @@ plt.title('Connected Components')
 plt.axis('off')
 plt.show()
 
+def removeFigures(binarized_img,original_img):
+    contours,_ = cv.findContours(np.uint8(np.logical_not(binarized_img)), cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
+    mask = np.ones(original_img.shape[:2], dtype="uint8") * 255
+    for contour in contours:
+        [x,y,w,h] = cv.boundingRect(contour)
+        if w>300 or h>300:
+            cv.drawContours(mask, [contour], -1, 0, -1)
+    original_img = cv.bitwise_and(~original_img, ~original_img, mask=mask)
+    return ~original_img
+        
+
 def printContours(binarization,output_img):
     #draw a green rectangle around to characters/words
     contours,_  = cv.findContours(np.uint8(np.logical_not(binarization)),cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
     
     for contour in contours:
-    
-        #disegna un rettangolo verde intorno ai caratteri
         [x,y,w,h] = cv.boundingRect(contour)
         cv.rectangle(output_img, (x,y), (x+w,y+h), (0, 255, 0), 1)
         
-        
-printContours(bin_sauvola,img_char)    
-showImage('Characters Contour', img_char)    
+img_bin_char = bin_sauvola.copy()
+       
+printContours(img_bin_char,img_bin_char)    
+showImage('Characters Contour', img_bin_char*255)    
 
 def pixelDistance(image, vertical: bool = False):
     if vertical:
@@ -84,13 +94,15 @@ def pixelDistance(image, vertical: bool = False):
 
     for i in range(rows):
         for j in range(cols):
-            '''if image[i][j]==255 and image[i][0]==255:
+            if image[i][j]==255 and image[i][0]==255:
+                '''
                 if i!=i2:
                     flag=1
                     i2=i
                 else:
                     flag=flag+1
-                    i2=i'''
+                    i2=i
+                    '''
             if image[i][j]==0:
                 if i!=i1:
                     distance.append('-1')
@@ -138,9 +150,9 @@ def histogram(image,distance):
     #plt.imshow(image,'gray'), plt.xticks([]), plt.yticks([]), plt.show()
     plt.hist(distance,256,[0,30]), plt.show()
     #plt.savefig('hist.png', dpi=1800)
-
-pix_dist_horiz=pixelDistance(bin_otsu)
-pix_dist_vert=pixelDistance(bin_otsu,True)
+'''
+pix_dist_horiz=pixelDistance(bin_sauvola)
+pix_dist_vert=pixelDistance(bin_sauvola,True)
 value_horiz=valueRLSA(pix_dist_horiz)
 value_vert=valueRLSA(pix_dist_vert)
 histogram(bin_sauvola,pix_dist_horiz)
@@ -148,35 +160,38 @@ histogram(bin_sauvola,pix_dist_vert)
 
 #DA VERIFICARE RLSA ADATTIVO, HO FATTO VARI TEST MA LA DIVISIONE DELLE PAROLE NON FUNZIONA BENE
 
-img_rlsa_oriz = rlsa.rlsa(bin_sauvola.copy(), True, False, value_horiz)  
+img_rlsa_oriz = rlsa.rlsa(img_bin_char.copy(), True, False, value_horiz+1)  
 img_rlsa_full = rlsa.rlsa(img_rlsa_oriz.copy(), False, True, value_vert)
-
+'''
+img_rlsa_full = rlsa.rlsa(bin_sauvola.copy(), True, True, 10)
 
 showImage('RLSA',img_rlsa_full*255)
 printContours(img_rlsa_full,img_word)
-showImage('Words Contour', img_word)   
+showImage('Words Contour', img_word)
+
+
+   
 
 def houghTransformDeskew(binarized_img,original_img):
   
-    edges = cv.Canny(binarized_img*255, 50, 200, 3)#find edges on the image
+    edges = cv.Canny(binarized_img, 50, 200, 3)#find edges on the image
     img_lines = cv.cvtColor(edges, cv.COLOR_GRAY2BGR) #convert edges image from Gray to BGR
 
     lines = cv.HoughLinesP(edges, 1, np.pi/180, 80,None,100,10) #function used for finding coordinates x0,y0 and x1,y1 for deskew
     tested_angles = np.linspace(-np.pi/2, np.pi / 2, 360)
     h, theta, d = hough_line(edges,tested_angles)#function used for plot histogram Hough transform
-
-    #show histogram
-    
     
     if lines is not None:
         angle = 0.0
         num_lines = len(lines)
+        
         for i in range(0, len(lines)):
             #write blue lines on image according to Hough lines
             l = lines[i][0]
             cv.line(img_lines, (l[0], l[1]), (l[2], l[3]), (255,0,0), 3, cv.LINE_AA)
             angle += math.atan2(l[3]*1.0 - l[1]*1.0,l[2]*1.0 - l[0]*1.0)
-            
+           
+        
         angle /= num_lines*1.0
         best_angle = angle* 180.0 / np.pi
         
@@ -186,23 +201,25 @@ def houghTransformDeskew(binarized_img,original_img):
         (height, width) = original_img.shape[:2]
         center = (width // 2, height // 2)
         print(height)
-        
+        #show histogram
         plt.figure(figsize=(20,20))
-        plt.imshow(np.log(1 + h), extent=[np.rad2deg(theta[-1]), np.rad2deg(theta[0]), d[-1], d[0]],cmap ='nipy_spectral',aspect=1.0 / (height/16))
+        plt.imshow(np.log(1 + h), extent=[np.rad2deg(theta[-1]), np.rad2deg(theta[0]), d[-1], d[0]],cmap ='nipy_spectral',aspect=1.0 / (height/30))
         plt.title('Histogram Hough Transform')
         
         root_mat = cv.getRotationMatrix2D(center, best_angle, 1)
         rotated = cv.warpAffine(original_img, root_mat, (width,height), flags=cv.INTER_CUBIC,borderMode=cv.BORDER_REPLICATE) 
         return rotated
     return None
-    
-rotated = houghTransformDeskew(img_rlsa_full,img)
+
+img_no_figures = removeFigures(img_rlsa_full,img)
+showImage('Image Without Figures', img_no_figures) 
+rotated = houghTransformDeskew(img_no_figures,img)
 if rotated is not None:
     showImage('Rotated Image', rotated)
 else:
     print('Image not skewed')
 
-#showImage('Detected Lines with Probabilistic Line Transform', img_lines)
+
 
 
 
