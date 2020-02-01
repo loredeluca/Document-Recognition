@@ -11,12 +11,23 @@ import sklearn.preprocessing
 
 #img = cv.imread("N0024670aao.tif")  #Leggo l'immagine 
 
-img = cv.imread("N0024670aas.tif")
-img_word = img.copy() 
+img = cv.imread("skew.tif")
+img_word = img.copy()
+img_centroids = img.copy()
+img_vono = img.copy() 
 img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
-bin_otsu = sklearn.preprocessing.binarize(img_gray, threshold_otsu(img_gray))
-bin_sauvola = sklearn.preprocessing.binarize(img_gray, threshold_sauvola(img_gray))
+def binarization(mode,image):
+    if image.ndim >2:
+        image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    if mode == 'otsu':
+        return sklearn.preprocessing.binarize(image, threshold_otsu(image))
+    elif mode == 'sauvola':
+        return sklearn.preprocessing.binarize(image, threshold_sauvola(image))
+        
+bin_otsu = binarization('otsu',img_gray)
+bin_sauvola = binarization('sauvola',img_gray)
+
 '''
 plt.figure(figsize=(50,45))
 plt.subplot(3, 2, 1)
@@ -46,7 +57,7 @@ def showImage(text_name, file_name):
 showImage('Original Image',img)
 showImage('Otsu Binarization',bin_otsu*255)
 
-bin_sauvola = cv.medianBlur(bin_sauvola, 3) #apply median blur to remove black spots on image
+#bin_sauvola = cv.medianBlur(bin_sauvola, 3) #apply median blur to remove black spots on image
 
 showImage('Sauvola Binarization', bin_sauvola*255)
 
@@ -76,11 +87,93 @@ def printContours(binarization,output_img):
     for contour in contours:
         [x,y,w,h] = cv.boundingRect(contour)
         cv.rectangle(output_img, (x,y), (x+w,y+h), (0, 255, 0), 1)
+ 
+def findCentroids(binarization,output_img):
+    contours,_  = cv.findContours(np.uint8(np.logical_not(binarization)),cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
+    points = []
+    f = open('punti.txt', 'w')
+    
+    for contour in contours:
+        M = cv.moments(contour)
+ 
+        # calculate x,y coordinate of center
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            points.append((cX,cY))
+            f.write(str(cX) + ' ' + str(cY) + '\n')
+        else:
+            cX, cY = 0, 0
+            
+        cv.circle(output_img, (cX, cY), 5, (0, 255, 0), -1)
         
-img_bin_char = bin_sauvola.copy()
+    f.close()
+    return points
+
+def rect_contains(rect, point) :
+    if point[0] < rect[0] :
+        return False
+    elif point[1] < rect[1] :
+        return False
+    elif point[0] > rect[2] :
+        return False
+    elif point[1] > rect[3] :
+        return False
+    return True
+
+def draw_delaunay(img, subdiv, delaunay_color ) :
+
+    triangleList = subdiv.getTriangleList()
+    size = img.shape
+    r = (0, 0, size[1], size[0])
+
+    for t in triangleList :
+        
+        pt1 = (t[0], t[1])
+        pt2 = (t[2], t[3])
+        pt3 = (t[4], t[5])
+        
+        if rect_contains(r, pt1) and rect_contains(r, pt2) and rect_contains(r, pt3) :
+        
+            cv.line(img, pt1, pt2, delaunay_color, 1, cv.LINE_AA, 0)
+            cv.line(img, pt2, pt3, delaunay_color, 1, cv.LINE_AA, 0)
+            cv.line(img, pt3, pt1, delaunay_color, 1, cv.LINE_AA, 0)
+
+def draw_voronoi(image, subdiv) :
+
+    (facets, centers) = subdiv.getVoronoiFacetList([])
+
+    for i in range(0,len(facets)) :
+        ifacet_arr = []
+        for f in facets[i] :
+            ifacet_arr.append(f)
+        ifacet = np.array(ifacet_arr, np.int)
+        ifacets = np.array([ifacet])
+        cv.polylines(image, ifacets, True, (255, 0, 0), 1, cv.LINE_AA, 0)
+
+def vonoroi(points,image):
+    img_vonoroi = image.copy()
+    size = image.shape
+    rect = (0, 0, size[1], size[0])
+    subdiv = cv.Subdiv2D(rect)
+    for p in points :
+        subdiv.insert(p)
+    draw_delaunay( image, subdiv, (0, 0, 255) )
+    for p in points :
+        cv.circle(image, p, 2, (255,0,0), cv.FILLED, cv.LINE_AA, 0 )
+
+    draw_voronoi(img_vonoroi,subdiv)
+    showImage('Delaunay Triangulation',image)
+    showImage('Voronoi Diagram',img_vonoroi)
+    
        
+img_bin_char = bin_sauvola.copy()
 printContours(img_bin_char,img_bin_char)    
 showImage('Characters Contour', img_bin_char*255)    
+points = findCentroids(bin_sauvola,img_centroids)
+showImage('Centroids',img_centroids)
+vonoroi(points, img_vono)
+
 
 def pixelDistance(image, vertical: bool = False):
     if vertical:
@@ -94,6 +187,7 @@ def pixelDistance(image, vertical: bool = False):
 
     for i in range(rows):
         for j in range(cols):
+            
             if image[i][j]==255 and image[i][0]==255:
                 '''
                 if i!=i2:
@@ -150,24 +244,29 @@ def histogram(image,distance):
     #plt.imshow(image,'gray'), plt.xticks([]), plt.yticks([]), plt.show()
     plt.hist(distance,256,[0,30]), plt.show()
     #plt.savefig('hist.png', dpi=1800)
+    
+
 '''
-pix_dist_horiz=pixelDistance(bin_sauvola)
-pix_dist_vert=pixelDistance(bin_sauvola,True)
+pix_dist_horiz=pixelDistance(bin_sauvola*255)
+pix_dist_vert=pixelDistance(bin_sauvola*255,True)
 value_horiz=valueRLSA(pix_dist_horiz)
 value_vert=valueRLSA(pix_dist_vert)
 histogram(bin_sauvola,pix_dist_horiz)
 histogram(bin_sauvola,pix_dist_vert)
-
+'''
 #DA VERIFICARE RLSA ADATTIVO, HO FATTO VARI TEST MA LA DIVISIONE DELLE PAROLE NON FUNZIONA BENE
 
-img_rlsa_oriz = rlsa.rlsa(img_bin_char.copy(), True, False, value_horiz+1)  
-img_rlsa_full = rlsa.rlsa(img_rlsa_oriz.copy(), False, True, value_vert)
-'''
+#img_rlsa_oriz = rlsa.rlsa(img_bin_char.copy(), True, False, 10)  
+#img_rlsa_full = rlsa.rlsa(img_rlsa_oriz.copy(), False, True, 3)
+
 img_rlsa_full = rlsa.rlsa(bin_sauvola.copy(), True, True, 10)
 
 showImage('RLSA',img_rlsa_full*255)
 printContours(img_rlsa_full,img_word)
 showImage('Words Contour', img_word)
+
+
+
 
 
    
@@ -212,20 +311,39 @@ def houghTransformDeskew(binarized_img,original_img):
     return None
 
 img_no_figures = removeFigures(img_rlsa_full,img)
-showImage('Image Without Figures', img_no_figures) 
+showImage('Image Without Figures', img_no_figures)
+ 
 rotated = houghTransformDeskew(img_no_figures,img)
+
 if rotated is not None:
     showImage('Rotated Image', rotated)
 else:
     print('Image not skewed')
 
+bin_rotated = binarization('sauvola',rotated)
 
-
-
+def projection(img_bin, img_gray):
+    #Counting black pixels per row (axis=0: col, axis=1:row)
+    counts = np.sum(img_bin==0, axis=1) 
+    row_number = [i for i in range(img_bin.shape[0])]
+    #counts = smooth(counts,20) #ammorbidisce il grafico dei pixel
+    
+    f, (ax1, ax2) = plt.subplots(1, 2, sharey=True, figsize=(30, 15))
+    ax1.imshow(img_gray,'gray'), plt.yticks([])
+    ax1.tick_params(axis='both', which='major', labelsize=10)
+    ax2.plot(counts,row_number,label='fit')
+    ax2.tick_params(axis='both', which='major', labelsize=10)
+    plt.xlabel('Number of Black Pixels',fontsize=20)
+    plt.ylabel('Row Number',fontsize=20)
+    plt.subplots_adjust( wspace = -0.1)
+    plt.savefig('Projection.png')#, dpi=1800)
+    
+   
+projection(bin_rotated,rotated)
 
 '''
 plt.subplot(3,2,4)
-plt.imshow(labels, 'nipy_spectral')s
+plt.imshow(labels, 'nipy_spectral')
 plt.title('Connected Components')
 plt.axis('off')
 
