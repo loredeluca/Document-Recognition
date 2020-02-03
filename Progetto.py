@@ -7,11 +7,12 @@ from skimage.transform import hough_line
 from skimage import measure
 from pythonRLSA import rlsa
 import sklearn.preprocessing 
+from scipy.sparse.csgraph import minimum_spanning_tree
+from sklearn.neighbors import kneighbors_graph
 
 
 #img = cv.imread("N0024670aao.tif")  #Leggo l'immagine 
-
-img = cv.imread("skew.tif")
+img = cv.imread("N0024670aan.tif")
 img_word = img.copy()
 img_centroids = img.copy()
 img_vono = img.copy() 
@@ -88,91 +89,11 @@ def printContours(binarization,output_img):
         [x,y,w,h] = cv.boundingRect(contour)
         cv.rectangle(output_img, (x,y), (x+w,y+h), (0, 255, 0), 1)
  
-def findCentroids(binarization,output_img):
-    contours,_  = cv.findContours(np.uint8(np.logical_not(binarization)),cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
-    points = []
-    f = open('punti.txt', 'w')
-    
-    for contour in contours:
-        M = cv.moments(contour)
- 
-        # calculate x,y coordinate of center
-        if M["m00"] != 0:
-            cX = int(M["m10"] / M["m00"])
-            cY = int(M["m01"] / M["m00"])
-            points.append((cX,cY))
-            f.write(str(cX) + ' ' + str(cY) + '\n')
-        else:
-            cX, cY = 0, 0
-            
-        cv.circle(output_img, (cX, cY), 5, (0, 255, 0), -1)
-        
-    f.close()
-    return points
-
-def rect_contains(rect, point) :
-    if point[0] < rect[0] :
-        return False
-    elif point[1] < rect[1] :
-        return False
-    elif point[0] > rect[2] :
-        return False
-    elif point[1] > rect[3] :
-        return False
-    return True
-
-def draw_delaunay(img, subdiv, delaunay_color ) :
-
-    triangleList = subdiv.getTriangleList()
-    size = img.shape
-    r = (0, 0, size[1], size[0])
-
-    for t in triangleList :
-        
-        pt1 = (t[0], t[1])
-        pt2 = (t[2], t[3])
-        pt3 = (t[4], t[5])
-        
-        if rect_contains(r, pt1) and rect_contains(r, pt2) and rect_contains(r, pt3) :
-        
-            cv.line(img, pt1, pt2, delaunay_color, 1, cv.LINE_AA, 0)
-            cv.line(img, pt2, pt3, delaunay_color, 1, cv.LINE_AA, 0)
-            cv.line(img, pt3, pt1, delaunay_color, 1, cv.LINE_AA, 0)
-
-def draw_voronoi(image, subdiv) :
-
-    (facets, centers) = subdiv.getVoronoiFacetList([])
-
-    for i in range(0,len(facets)) :
-        ifacet_arr = []
-        for f in facets[i] :
-            ifacet_arr.append(f)
-        ifacet = np.array(ifacet_arr, np.int)
-        ifacets = np.array([ifacet])
-        cv.polylines(image, ifacets, True, (255, 0, 0), 1, cv.LINE_AA, 0)
-
-def vonoroi(points,image):
-    img_vonoroi = image.copy()
-    size = image.shape
-    rect = (0, 0, size[1], size[0])
-    subdiv = cv.Subdiv2D(rect)
-    for p in points :
-        subdiv.insert(p)
-    draw_delaunay( image, subdiv, (0, 0, 255) )
-    for p in points :
-        cv.circle(image, p, 2, (255,0,0), cv.FILLED, cv.LINE_AA, 0 )
-
-    draw_voronoi(img_vonoroi,subdiv)
-    showImage('Delaunay Triangulation',image)
-    showImage('Voronoi Diagram',img_vonoroi)
-    
-       
+   
 img_bin_char = bin_sauvola.copy()
 printContours(img_bin_char,img_bin_char)    
 showImage('Characters Contour', img_bin_char*255)    
-points = findCentroids(bin_sauvola,img_centroids)
-showImage('Centroids',img_centroids)
-vonoroi(points, img_vono)
+
 
 
 def pixelDistance(image, vertical: bool = False):
@@ -340,6 +261,123 @@ def projection(img_bin, img_gray):
     
    
 projection(bin_rotated,rotated)
+
+def findCentroids(binarization,output_img):
+    contours,_  = cv.findContours(np.uint8(np.logical_not(binarization)),cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
+    points = []
+    f = open('punti.txt', 'w')
+    
+    for contour in contours:
+        M = cv.moments(contour)
+ 
+        # calculate x,y coordinate of center
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            points.append((cX,cY))
+            f.write(str(cX) + ' ' + str(cY) + '\n')
+        else:
+            cX, cY = 0, 0
+            
+        cv.circle(output_img, (cX, cY), 5, (0, 255, 0), -1)
+        points.sort(key=lambda x:x[0])
+    f.close()
+    return points
+
+def rect_contains(rect, point) :
+    if point[0] < rect[0] :
+        return False
+    elif point[1] < rect[1] :
+        return False
+    elif point[0] > rect[2] :
+        return False
+    elif point[1] > rect[3] :
+        return False
+    return True
+
+def draw_delaunay(img, subdiv, delaunay_color ) :
+
+    triangleList = subdiv.getTriangleList()
+    size = img.shape
+    r = (0, 0, size[1], size[0])
+
+    for t in triangleList :
+        
+        pt1 = (t[0], t[1])
+        pt2 = (t[2], t[3])
+        pt3 = (t[4], t[5])
+        
+        if rect_contains(r, pt1) and rect_contains(r, pt2) and rect_contains(r, pt3) :
+        
+            cv.line(img, pt1, pt2, delaunay_color, 1, cv.LINE_AA, 0)
+            cv.line(img, pt2, pt3, delaunay_color, 1, cv.LINE_AA, 0)
+            cv.line(img, pt3, pt1, delaunay_color, 1, cv.LINE_AA, 0)
+
+def draw_voronoi(image, subdiv) :
+
+    (facets, centers) = subdiv.getVoronoiFacetList([])
+
+    for i in range(0,len(facets)) :
+        ifacet_arr = []
+        for f in facets[i] :
+            ifacet_arr.append(f)
+        ifacet = np.array(ifacet_arr, np.int)
+        ifacets = np.array([ifacet])
+        cv.polylines(image, ifacets, True, (255, 0, 0), 1, cv.LINE_AA, 0)
+
+def vonoroi(points,image):
+    img_vonoroi = image.copy()
+    size = image.shape
+    rect = (0, 0, size[1], size[0])
+    subdiv = cv.Subdiv2D(rect)
+    for p in points :
+        subdiv.insert(p)
+        '''
+        img_copy = image.copy()
+        # Draw delaunay triangles
+        draw_delaunay( img_copy, subdiv, (0, 0, 255) )
+        cv.namedWindow('Delaunay Triangulation', cv.WINDOW_NORMAL)
+        cv.imshow('Delaunay Triangulation', img_copy)
+        cv.waitKey(10)
+        '''
+    draw_delaunay( image, subdiv, (0, 0, 255) )
+    for p in points :
+        cv.circle(image, p, 2, (255,0,0), cv.FILLED, cv.LINE_AA, 0 )
+
+    draw_voronoi(img_vonoroi,subdiv)
+    showImage('Delaunay Triangulation',image)
+    showImage('Voronoi Diagram',img_vonoroi)
+    
+points = findCentroids(bin_sauvola,img_centroids)
+showImage('Centroids',img_centroids)
+vonoroi(points, img_vono)    
+
+
+
+def minimum_spanning_tree_edges(V, k): #return vector of edges
+    
+    # k: int the number of neighbor to consider for each vector
+    # k = len(X)-1 gives the exact MST
+    k = min(len(V) - 1, k)
+
+    # generate a sparse graph using the k nearest neighbors of each point
+    G = kneighbors_graph(V, n_neighbors=k, mode='distance')
+
+    # Compute the minimum spanning tree of this graph
+    full_tree = minimum_spanning_tree(G, overwrite=True)
+
+    return np.array(full_tree.nonzero()).T 
+            
+points = np.int32(points)
+edges= minimum_spanning_tree_edges(points,4)
+#plt.scatter(p[:, 0], p[:, 1])
+plt.figure(figsize=(30,20))
+plt.imshow(img, 'gray')    
+for edge in edges:
+    i, j = edge
+    #print(edge)
+    plt.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c='r')
+plt.show()
 
 '''
 plt.subplot(3,2,4)
