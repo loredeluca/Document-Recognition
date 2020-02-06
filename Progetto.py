@@ -3,7 +3,7 @@ import numpy as np
 import math
 from matplotlib import pyplot as plt
 from skimage.filters import (threshold_otsu, threshold_sauvola)
-from skimage.transform import hough_line
+from skimage.transform import hough_line,hough_line_peaks
 from skimage import measure
 from pythonRLSA import rlsa
 import sklearn.preprocessing 
@@ -12,10 +12,10 @@ from sklearn.neighbors import kneighbors_graph
 
 
 #img = cv.imread("N0024670aao.tif")  #Leggo l'immagine 
-img = cv.imread("N0024670aan.tif")
+img = cv.imread("K.png")
 img_word = img.copy()
 img_centroids = img.copy()
-img_vono = img.copy() 
+img_voro = img.copy() 
 img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
 def binarization(mode,image):
@@ -49,18 +49,20 @@ plt.axis('off')
 '''
 
 def showImage(text_name, file_name):
+    '''
     cv.namedWindow(text_name, cv.WINDOW_NORMAL)
     cv.imshow(text_name, file_name)
     cv.imwrite(text_name+'.png', file_name)
     cv.waitKey(0)
     cv.destroyWindow(text_name)
+    '''
     
 showImage('Original Image',img)
 showImage('Otsu Binarization',bin_otsu*255)
-
-#bin_sauvola = cv.medianBlur(bin_sauvola, 3) #apply median blur to remove black spots on image
-
 showImage('Sauvola Binarization', bin_sauvola*255)
+
+bin_sauvola = cv.medianBlur(bin_sauvola, 3) #apply median blur to remove black spots on images
+showImage('Sauvola Binarization BLUR', bin_sauvola*255)
 
 labels = measure.label(bin_sauvola, background = 1, connectivity=2)
 
@@ -225,7 +227,7 @@ def houghTransformDeskew(binarized_img,original_img):
         plt.figure(figsize=(20,20))
         plt.imshow(np.log(1 + h), extent=[np.rad2deg(theta[-1]), np.rad2deg(theta[0]), d[-1], d[0]],cmap ='nipy_spectral',aspect=1.0 / (height/30))
         plt.title('Histogram Hough Transform')
-        
+        plt.show()
         root_mat = cv.getRotationMatrix2D(center, best_angle, 1)
         rotated = cv.warpAffine(original_img, root_mat, (width,height), flags=cv.INTER_CUBIC,borderMode=cv.BORDER_REPLICATE) 
         return rotated
@@ -238,10 +240,10 @@ rotated = houghTransformDeskew(img_no_figures,img)
 
 if rotated is not None:
     showImage('Rotated Image', rotated)
+    bin_rotated = binarization('sauvola',rotated)
 else:
     print('Image not skewed')
 
-bin_rotated = binarization('sauvola',rotated)
 
 def projection(img_bin, img_gray):
     #Counting black pixels per row (axis=0: col, axis=1:row)
@@ -260,7 +262,7 @@ def projection(img_bin, img_gray):
     plt.savefig('Projection.png')#, dpi=1800)
     
    
-projection(bin_rotated,rotated)
+#projection(bin_rotated,rotated)
 
 def findCentroids(binarization,output_img):
     contours,_  = cv.findContours(np.uint8(np.logical_not(binarization)),cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
@@ -325,11 +327,12 @@ def draw_voronoi(image, subdiv) :
         ifacets = np.array([ifacet])
         cv.polylines(image, ifacets, True, (255, 0, 0), 1, cv.LINE_AA, 0)
 
-def vonoroi(points,image):
-    img_vonoroi = image.copy()
+def voronoi(points,image):
+    img_voronoi = image.copy()
     size = image.shape
     rect = (0, 0, size[1], size[0])
     subdiv = cv.Subdiv2D(rect)
+    
     for p in points :
         subdiv.insert(p)
         '''
@@ -344,40 +347,133 @@ def vonoroi(points,image):
     for p in points :
         cv.circle(image, p, 2, (255,0,0), cv.FILLED, cv.LINE_AA, 0 )
 
-    draw_voronoi(img_vonoroi,subdiv)
+    draw_voronoi(img_voronoi,subdiv)
     showImage('Delaunay Triangulation',image)
-    showImage('Voronoi Diagram',img_vonoroi)
+    showImage('Voronoi Diagram',img_voronoi)
     
 points = findCentroids(bin_sauvola,img_centroids)
 showImage('Centroids',img_centroids)
-vonoroi(points, img_vono)    
+voronoi(points, img_voro)    
 
 
-
-def minimum_spanning_tree_edges(V, k): #return vector of edges
-    
+def k_neighbors_graph(V, k):
     # k: int the number of neighbor to consider for each vector
     # k = len(X)-1 gives the exact MST
     k = min(len(V) - 1, k)
-
+    
     # generate a sparse graph using the k nearest neighbors of each point
-    G = kneighbors_graph(V, n_neighbors=k, mode='distance')
+    return kneighbors_graph(V, n_neighbors=k, mode='distance')
 
+def minimum_spanning_tree_edges(V, k): #return vector of edges
+    
+    G = k_neighbors_graph(V, k)
+    
     # Compute the minimum spanning tree of this graph
     full_tree = minimum_spanning_tree(G, overwrite=True)
+    
 
     return np.array(full_tree.nonzero()).T 
-            
+Graph = k_neighbors_graph(points,5)           
+k_kneighbors_edges = np.array(Graph.nonzero()).T
+k_kneighbors_distances = Graph.data
+
+
+ciao=[]
+for i in range(k_kneighbors_distances.shape[0]):
+    ciao.append(i)
+plt.figure(figsize=(20,10))
+plt.bar(ciao,k_kneighbors_distances)
+plt.show()
+#plt.show()
 points = np.int32(points)
-edges= minimum_spanning_tree_edges(points,4)
+mst_edges= minimum_spanning_tree_edges(points,5)
+'''
+distance = []
+for edge in edges:
+    c1,c2 = edge
+    x1,y1 = points[c1]
+    x2,y2 = points[c2]
+    print(x1,y1,x2,y2)
+    dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    distance.append(dist)
+    print(dist)
+'''  
+def angle_between(p1, p2):
+    dx = p2[1]-p1[1]
+    dy = p2[0]-p1[0]
+    #ang1 = np.arctan2(p1[0],p1[1])
+    #ang2 = np.arctan2(p2[0],p2[1])
+    #return np.rad2deg((ang1 - ang2) % (2 * np.pi))
+    arctan = math.atan2(dx,dy)
+    return math.degrees(arctan)
+
+plt.figure(figsize=(30,20))
+plt.imshow(img, 'gray')    
+img_blank = np.zeros(img.shape, np.uint8)
+angles = []
+for edge in k_kneighbors_edges:
+    #i, j = edge
+    i,j = edge
+    x1,y1 = points[i]
+    x2,y2 = points[j]
+    angles.append(angle_between(points[i],points[j]))
+    cv.line(img_blank, (points[i, 0], points[i, 1]), (points[j, 0], points[j, 1]), (0,0,255), 3, cv.LINE_AA)
+    plt.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c='r')
+plt.show()   
+showImage('K-NN',img_blank) 
+oriz =[]
+vert = []
+for angle in angles:
+    abs_angle = abs(angle)
+    
+    if -45<= angle <= 45 or 135 <= angle or angle <= -135:
+        oriz.append(angle)
+    else:
+        vert.append(angle)
+
+    
 #plt.scatter(p[:, 0], p[:, 1])
 plt.figure(figsize=(30,20))
 plt.imshow(img, 'gray')    
-for edge in edges:
-    i, j = edge
+for edge in mst_edges:
+    #i, j = edge
+    i,j = edge
+    x1,y1 = points[i]
+    x2,y2 = points[j]
+    dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
     #print(edge)
+    #if dist<25:
+    #angles.append(angle_between(points[i],points[j]))
     plt.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c='r')
 plt.show()
+
+
+ 
+# calculate the Euclidean distance between two vectors
+def euclidean_distance(point1, point2):
+	distance = (point2[0] - point1[0])**2 + (point2[1] - point1[1])**2
+	return math.sqrt(distance)
+ 
+# Locate the most similar neighbors
+def get_neighbors(train, test_point, num_neighbors):
+    distances = []
+    index = 0
+    for train_point in train:
+        dist = euclidean_distance(test_point, train_point)
+        distances.append((train_point, dist, index))
+        index +=1
+    distances.sort(key=lambda tup: tup[1])
+    neighbors = []
+    for i in range(num_neighbors):
+        neighbors.append((distances[i][0],distances[i][2]))
+    return neighbors
+ 
+# Test distance function
+
+neighbors = get_neighbors(points, points[0], 3)
+for neighbor in neighbors:
+	print(neighbor)
+
 
 '''
 plt.subplot(3,2,4)
