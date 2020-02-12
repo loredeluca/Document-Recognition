@@ -2,6 +2,11 @@ import cv2 as cv
 import numpy as np
 import math
 import statistics
+import os
+import glob
+import igraph
+import networkx as nx
+#from igraph import Graph, EdgeSeq
 from matplotlib import pyplot as plt
 from skimage.filters import (threshold_otsu, threshold_sauvola)
 from skimage.transform import hough_line
@@ -21,6 +26,7 @@ ho migliorato anche la creazione dei box in modo tale da evitare gli spots
 '''
 
 def binarization(mode,image):
+    #AGGIUNGERE MOLT PER 255
     '''
     Method used for the binarization, using two different threshold (Otsu and Sauvola)
     
@@ -73,7 +79,9 @@ def removeFiguresOrSpots(binarized_img,original_img, mode):
     -------
     new_img : array of original image pixels without figures or spots.
     '''
-    contours,_ = cv.findContours(np.uint8(np.logical_not(binarized_img)), cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    if original_img.ndim >2:
+        original_img = cv.cvtColor(original_img, cv.COLOR_BGR2GRAY)
+    contours,_ = cv.findContours(np.uint8(np.logical_not(binarized_img)), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
     new_img = original_img.copy()
     for contour in contours:
         [x,y,w,h] = cv.boundingRect(contour)
@@ -81,12 +89,12 @@ def removeFiguresOrSpots(binarized_img,original_img, mode):
             if w>400 or h>300 :#remove if the box it's too big (figure) or if it's too small (spot)
                 for i in range(y,y+h):
                     for j in range(x, x+w):
-                        new_img[i][j] = (255,255,255)
+                        new_img[i][j] = 255
         elif mode == 'spots':
-            if ((0<=w<=7) and (0<=h<=7)):
+            if ((0<=w<=7) and (0<=h<=7)):  #DACONTROLLARE (RIMUOVE PUNTI)
                 for i in range(y,y+h):
                     for j in range(x, x+w):
-                        new_img[i][j] = (255,255,255)
+                        new_img[i][j] = 255
     #showImage('gn',new_img)
     return new_img
         
@@ -137,18 +145,34 @@ def rlsa(image, horizontal: bool = True, vertical: bool = True, value: int = 0):
     return image
    
 def showCC(binarized_img,conn):
-    cc, labels = cv.connectedComponents(~binarized_img,connectivity=conn)
-    print('The Connected Components are ', cc)
     
-    label_color = np.uint8(179*labels/cc-1)
+    cc, labels = cv.connectedComponents(~binarized_img,connectivity=conn)
+    
+    
+    label_color = np.uint8(179*labels/(cc-1))
     blank_channel = 255*np.ones_like(label_color)#creates a white matrix
     labeled_img = cv.merge([label_color, blank_channel, blank_channel])#creates an image in RGB
     
     labeled_img = cv.cvtColor(labeled_img, cv.COLOR_HSV2BGR)#convert to BGR for display
-
+    
     labeled_img[label_color==0] = 0 #set backgroud label to black
     
-    return labeled_img
+    if conn==4:
+        print('number of CC with connectivity 4:',cc)
+        titles = ['Original Image','CC with connettivity 4']
+    elif conn==8:
+        print('number of CC with connectivity 8:',cc)
+        titles = ['Original Image','CC with connettivity 8']
+    images = [binarized_img, labeled_img]
+    for i in range(2):
+        plt.figure(figsize=(20,20))
+        plt.subplot(1,2,i+1)
+        plt.imshow((images[i]),'gray')
+        plt.title(titles[i])
+        plt.axis('off')
+
+    plt.show()
+    
 
 
 def findMidDistanceContour(binarized_img):
@@ -211,7 +235,7 @@ def histogram(binarized_img,distance):
 
    
 
-def houghTransformDeskew(binarized_img,original_img):
+def houghTransformDeskew(binarized_img,original_img, plot : bool = True):
     '''
     Compute deskew angle using Hough transform, it also plot the histogram of Hough
     transform and build the deskew of the image.
@@ -251,19 +275,33 @@ def houghTransformDeskew(binarized_img,original_img):
         
         (height, width) = original_img.shape[:2]
         center = (width // 2, height // 2)
-        
-        #show histogram of Hough transform
-        plt.figure(figsize=(20,20))
-        plt.imshow(np.log(1 + h), extent=[np.rad2deg(theta[-1]), np.rad2deg(theta[0]), d[-1], d[0]], cmap ='nipy_spectral', aspect=1.0 / (height/30))
-        plt.title('Histogram Hough Transform')
-        plt.show()
+        if plot:
+            #show histogram of Hough transform
+            plt.figure(figsize=(20,20))
+            plt.imshow(np.log(1 + h), extent=[np.rad2deg(theta[-1]), np.rad2deg(theta[0]), d[-1], d[0]], cmap ='nipy_spectral', aspect=1.0 / (height/30))
+            plt.title('Histogram Hough Transform')
+            plt.show()
         #build the deskew
         root_mat = cv.getRotationMatrix2D(center, best_angle, 1)
         img_rotated = cv.warpAffine(original_img, root_mat, (width,height), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_REPLICATE)
-        img_rotated_no_figures = img_rotated = cv.warpAffine(binarized_img, root_mat, (width,height), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_REPLICATE) 
-        return img_rotated, img_rotated_no_figures
+        img_rotated_no_fig = cv.warpAffine(binarized_img, root_mat, (width,height), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_REPLICATE) 
+        return img_rotated, img_rotated_no_fig
     return None
 
+def rotate(img_orig,img_bin):
+    img_copy = img_orig.copy()
+    printContours(img_bin,img_copy)       
+
+    valueH,_= valueRLSA(img_bin)
+    valueV,_ = valueRLSA(img_bin,True)
+    
+    img_rlsa_H = rlsa(img_bin.copy(), True, False, valueH)
+    img_rlsa_full = rlsa(img_rlsa_H.copy(),False,True,valueV)
+    
+    img_no_figures = removeFiguresOrSpots(img_rlsa_full, img_orig, 'figures')
+    img_rotated,_ = houghTransformDeskew(img_no_figures, img_orig, False)
+    return img_rotated
+    
 
 def projection(img_bin):
     
@@ -272,7 +310,18 @@ def projection(img_bin):
     row_number = [i for i in range(img_bin.shape[0])]
     #counts = smooth(counts,20) #ammorbidisce il grafico dei pixel
     return counts, row_number
+  
+def showProjection(img_bin, counts, row_number):
     
+    f, (ax1,ax2)= plt.subplots(1, 2, sharey=True, figsize=(70, 20))#(70,40)
+    ax1.imshow(img_bin,'gray')
+    ax1.tick_params(axis='both', which='major', labelsize=30)
+    ax2.plot(counts, row_number,label='fit')
+    ax2.tick_params(axis='both', which='major', labelsize=30)
+    plt.xlabel('Number of Black Pixels',fontsize=40)
+    plt.ylabel('Row Number',fontsize=40)
+    plt.subplots_adjust( wspace = 0)
+    plt.show()
     
    
 
@@ -500,9 +549,9 @@ def edgesInformation(edges, points, distances):
     for i in range(len(angles)):
     
         #if -24< angles[i] < 24 or 156 < angles[i] or angles[i] < -156:
-        if -10< angles[i] < 10 or 170 < angles[i] or angles[i] < -170:
+        if -15< angles[i] < 15 or 165 < angles[i] or angles[i] < -165:
             horizontal_edges.append((angles[i],distances[i],[edges[i][0],edges[i][1]]))
-        elif 80 < angles[i] < 100 or (-80 > angles[i] and angles[i] > -100)  :
+        elif 75 < angles[i] < 105 or (-75 > angles[i] and angles[i] > -105)  :
             vertical_edges.append((angles[i],distances[i],[edges[i][0],edges[i][1]]))
         else:
             munnezza.append((angles[i],distances[i],[edges[i][0],edges[i][1]]))
@@ -519,45 +568,250 @@ def edgesInformation(edges, points, distances):
     '''
     return horizontal_edges,vertical_edges
 
+
+def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
+    if verticalCut:
+        image_bin = image_bin.T
+        
+    #Counting black pixels per row (axis=0: col, axis=1:row)
+    counts,_ = projection(image_bin)
+
+    #cut contiene tutte le righe che hanno meno di nPixel pixel
+    cut=[]
+    for i in range(counts.shape[0]):
+        if(counts[i]<nPixel):
+            cut.append(i)
+    x=0
+    h=0
+    info=[]
+    flag=False
+    for j in range(len(cut)-1):
+        if cut[j+1]-cut[j]==1:
+            if flag==False:
+                h=cut[j]
+                flag=True
+            x=x+1
+        else:
+            info.append([x,h,cut[j]])
+            flag=False
+            x=0
+    info.append([x,h,cut[j]])
+    
+    delete=[]
+    for k in range(len(info)):
+        if info[k][0]<space:
+            delete.append(k)
+    for m in range(len(delete)-1,-1,-1):
+        info.remove(info[delete[m]])
+    #print('[[nPixel,pStart, pEnd]]:',info)
+    
+    
+    if verticalCut:
+        image_bin = image_bin.T
+        cv.imwrite('verticalCut.tif', image_bin)
+    else:
+        cv.imwrite('horizontalCut.tif', image_bin)
+    return info
+
+def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
+    #img_name='prova30.tif'
+    #img = cv.imread(img_name, 0)
+    imgV = img_bin# cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+    
+    #path = 'Users\\manus\\Desktop\\Progetto DDM\\XY_Tree'
+    
+    #horizontal cut
+    #imgV = cv2.imread(newName, 0)
+    for i in range(len(info)-1):
+        crop_img = imgV[info[i][2]:info[i+1][1],0:imgV.shape[1]]
+        new_imgname=img_name[:-4]+'_horizCrop'+str(i)+'.tif'
+        cv.imwrite(os.path.join(path , new_imgname),crop_img)
+        #cv2.imwrite(new_imgname, crop_img)
+        #plt.imshow(crop_img, 'gray'),plt.show()
+    #tree = Node()
+    #tree.name = 'Page(root)'
+
+    typeNode =[]
+    label=[]
+    
+    XY_Tree.add_vertices(1)
+    label.append('Pg')
+    typeNode.append('root')
+    
+    XY_Tree_Node=0
+    
+    
+    #vertical cut
+    filelist = []
+    for infile in glob.glob (os.path.join (path, 'prova*_horizCrop*.tif')):
+        filelist.append (infile)
+    filelist.sort()
+    #x=0
+    #y=0
+    
+    for file in filelist:
+        newRead = cv.imread(file, 0)
+        inf = cutImage(newRead,4,10,True)#4,21
+        if len(inf)==1:
+            print('NoCut')
+            title=input("Name: ")
+            #tree.add_child()
+            #tree[x].name = title
+            plt.title(title)
+            plt.imshow(newRead, 'gray'),plt.axis('off'),plt.show()
+        else:
+            flag=False
+            for h in range(len(inf)-1):
+                cropV = newRead[ 0:newRead.shape[0], inf[h][2]:inf[h+1][1] ]
+                newNameV = file[:-4]+'_FinalVC'+str(h)+'.tif'
+                cv.imwrite(os.path.join(path , newNameV), cropV)
+                title=input("Name: ")
+                XY_Tree_Node += 1
+                if len(inf)<=2:
+                    XY_Tree.add_vertices(1)
+                    label.append(title)
+                    typeNode.append('leaf')
+                    XY_Tree.add_edges ([(0,XY_Tree_Node)])
+                    #tree.add_child()
+                    #tree[x].name = title
+                    #x=x+1
+                elif flag==False:
+                    #tree.add_child()
+                    #tree[x].name = 'O'
+                    #tree[x].add_child()
+                    #tree[x][y].name = title
+                    XY_Tree.add_vertices(1)
+                    label.append(' ')
+                    typeNode.append('node')
+                    XY_Tree.add_edges ([(0,XY_Tree_Node)])
+                    XY_Tree.add_vertices(1)
+                    label.append(title)
+                    typeNode.append('leaf')
+                    count = 0
+                    XY_Tree.add_edges ([(XY_Tree_Node,XY_Tree_Node+1)])
+                    #x=x+1
+                    flag=True
+                else:
+                    #tree[x-1].add_child()
+                    #tree[x-1][y].name = title
+                    XY_Tree.add_vertices(1)
+                    label.append(title)
+                    typeNode.append('leaf')
+                    count += 1
+                    XY_Tree_Node += 1
+                    XY_Tree.add_edges ([(XY_Tree_Node-2*count,XY_Tree_Node-count+1)])
+                    
+                #y=y+1
+                #flag=False
+                plt.title(title)
+                plt.imshow(cropV, 'gray'),plt.axis('off'), plt.show()
+        #y=0
+    
+    #print(tree)
+    print(XY_Tree)
+    #return pippo,typeNode,label
+    return typeNode,label
+
+def fanculo():
+    '''
+    g = igraph.Graph()
+    g.add_vertices(5)
+    g.add_edges ([(0,1),(0,2),(0,3),(0,4)])
+    g.add_vertices(1)
+    g.add_edges ([(4,5)])
+    g.add_vertices(1)
+    g.add_edges ([(4,6)])
+
+    g.vs["name"] = ["A", "B", "C", "D","E","F","G"]
+    g.vs["type"] = ["root", "leaf", "leaf", "leaf","node","leaf","leaf"]
+    
+    g.vs["label"] = g.vs["name"]
+    color_dict = {"root": "white", "leaf": "red", "node": "yellow"}
+    g.vs["color"] = [color_dict[gender] for gender in g.vs["type"]]
+
+    layout = g.layout("tree")
+    igraph.plot(g, layout = layout, bbox = (200, 200), margin = 20)
+    '''
+    '''
+    g = nx.DiGraph()
+    g.add_node(5)
+    g.add_edges_from([(0,1),(0,2),(0,3),(0,4)])
+    g.add_node(1)
+    g.add_edges_from([(4,5)])
+    g.add_node(1)
+    g.add_edges_from([(4,6)])
+    '''
+    '''
+    G = nx.DiGraph()
+    G.add_node("ROOT")
+    for i in range(5):
+        G.add_node("Child_%i" % i)
+        G.add_node("Grandchild_%i" % i)
+        G.add_node("Greatgrandchild_%i" % i)
+
+        G.add_edge("ROOT", "Child_%i" % i)
+        G.add_edge("Child_%i" % i, "Grandchild_%i" % i)
+        G.add_edge("Grandchild_%i" % i, "Greatgrandchild_%i" % i)
+    #nx.draw(G, with_labels=True, font_weight='bold')
+    
+    plt.title('draw_networkx')
+    nx.graphv
+    pos=nx.graphviz_layout(G, prog='dot')
+    nx.draw(G, pos, with_labels=False, arrows=False)
+    plt.savefig('nx_test.png')
+    
+    #nx.draw_shell(g, nlist=[range(5, 10), range(5)], with_labels=True, font_weight='bold')
+    '''
+    G = nx.complete_graph(5)   # start with K5 in networkx
+    A = nx.nx_agraph.to_agraph(G)        # convert to a graphviz graph
+    X1 = nx.nx_agraph.from_agraph(A)     # convert back to networkx (but as Graph)
+    X2 = nx.Graph(A)          # fancy way to do conversion
+    G1 = nx.Graph(X1)          # now make it a Graph
+    nx.draw(G1, with_labels=True, font_weight='bold')
+
+
 def main():
     
-    img = cv.imread("Immagini prova\\N0024670aau.tif")  #Leggo l'immagine 
-    #img = cv.imread("k.png")
+    #img = cv.imread("Immagini prova\\N0024670aau.tif")  #Leggo l'immagine 
+    img = cv.imread("skew1.png")
     img_word = img.copy()
     img_centroids = img.copy()
-    
+    SHOWSTEPS = True
     img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     
     bin_otsu = binarization('otsu',img_gray)
     bin_sauvola = binarization('sauvola',img_gray)
     bin_inv = binarization('inverse',img_gray)
     
+    if SHOWSTEPS:
         
     
-    #showImage('Original Image',img)
-    #showImage('Otsu Binarization',bin_inv)
-    #showImage('Otsu Binarization',bin_otsu*255)
-    #showImage('Sauvola Binarization', bin_sauvola*255)
+        showImage('Original Image',img)
+        showImage('Otsu Binarization',bin_inv)
+        showImage('Otsu Binarization',bin_otsu*255)
+        showImage('Sauvola Binarization', bin_sauvola*255)
 
     #bin_sauvola = cv.medianBlur(bin_sauvola, 3) #apply median blur to remove black spots on images
     #showImage('Sauvola Binarization BLUR', bin_sauvola*255)
-
+    
+    rot = rotate(img,bin_sauvola)
+    showImage('rot',rot)
     
     
     
     img_no_spots = removeFiguresOrSpots(bin_sauvola,img,'spots')
     bin_no_spots = binarization('sauvola',img_no_spots)
     
-    labeled_image = showCC(bin_no_spots*255,8)
+    showCC(bin_no_spots*255, 8)
     
-    #showImage('cc',labeled_image)
+    
     
     img = img_no_spots
     bin_sauvola = bin_no_spots
     
     img_bin_char = bin_sauvola.copy()
     printContours(img_bin_char,img_bin_char)    
-    #showImage('Characters Contour', img_bin_char*255)    
+    showImage('Characters Contour', img_bin_char*255)    
 
     valueH,dist = valueRLSA(bin_sauvola)
     histogram(bin_sauvola,dist)
@@ -569,19 +823,19 @@ def main():
     img_rlsa_H = rlsa(bin_sauvola.copy(), True, False, valueH)
     img_rlsa_full = rlsa(img_rlsa_H.copy(),False,True,valueV)
 
-    #showImage('RLSA',img_rlsa_full*255)
+    showImage('RLSA',img_rlsa_full*255)
     printContours(img_rlsa_full,img_word)
     showImage('Words Contour', img_word)
     
     img_no_figures = removeFiguresOrSpots(img_rlsa_full,img,'figures')
-    #showImage('Image Without Figures', img_no_figures)
+    showImage('Image Without Figures', img_no_figures)
  
-    img_rotated, img_rotated_no_figures = houghTransformDeskew(img_no_figures,img)
+    img_rotated, img_rotated_no_fig = houghTransformDeskew(img_no_figures,img)
 
     if img_rotated is not None:
         #showImage('Rotated Image', img_rotated)
         bin_rotated = binarization('sauvola',img_rotated)
-        img = img_rotated_no_figures.copy()
+        img = img_rotated_no_fig.copy()
     else:
         print('Image not skewed')
 
@@ -593,8 +847,8 @@ def main():
     #projection(bin_rotated,rotated)
     
     points = findCentroids(bin_rotated,img_centroids)
-    #showImage('Centroids',img_centroids)
-    #voronoi(points, img_voro) 
+    showImage('Centroids',img_centroids)
+    voronoi(points, img_voro) 
     
     Graph = kNeighborsGraph(points,5)           
     k_kneighbors_edges = np.array(Graph.nonzero()).T
@@ -643,7 +897,7 @@ def main():
     showImage('K-NN Lines',img_k) 
     bin_img_k = binarization('sauvola',img_k)
     rlsa_docstrum = rlsa(bin_img_k.copy(), True, False, 2)
-    #showImage('K-NN Lines rlsa',rlsa_docstrum*255) 
+    showImage('K-NN Lines rlsa',rlsa_docstrum*255) 
     printContours(rlsa_docstrum,img_docstrum_lines)
     showImage('Docstrum lines',img_docstrum_lines)
     
@@ -660,7 +914,25 @@ def main():
     printContours(rlsa_docstrum,img_docstrum_box)
     showImage('Docstrum lines',img_docstrum_box)
     
-    
+def main1():
+    fanculo()
+    img_name = 'Prova0.tif'
+    img = cv.imread(img_name)
+    img_bin = binarization('otsu', img)
+    info=cutImage(img_bin,50,40)
+    infoV=cutImage(img_bin,50,20,True)
+    XY_Tree = igraph.Graph()
+    #pippo, typeNode, label=cutMatrix(img_name, img_bin, info, infoV, pippo)
+    typeNode, label=cutMatrix(img_name, img_bin, info, infoV, XY_Tree)
+    XY_Tree.vs["type"] = typeNode
+    XY_Tree.vs["label"] = label
+    color_dict = {"root": "white", "leaf": "red", "node": "yellow"}
+    XY_Tree.vs["color"] = [color_dict[type] for type in XY_Tree.vs["type"]]
+
+    print(XY_Tree)
+    #layout = pippo.layout("tree")
+    layout = XY_Tree.layout_reingold_tilford(mode="in", root=0)
+    igraph.plot(XY_Tree, layout = layout, bbox = (200, 200), margin = 20)
     
 
 
