@@ -95,6 +95,7 @@ def valueRLSA(binarized_img, vert: bool = False):
            
     value=sumDist/numSum
     midW = ut.findMidDistanceContour(binarized_img,vert)
+    
     value -= midW
     return round(value),distances
 
@@ -117,7 +118,7 @@ def houghTransformDeskew(binarized_img,original_img, plot : bool = True):
     img_lines = ut.cv.cvtColor(edges, ut.cv.COLOR_GRAY2BGR) #convert edges image from Gray to BGR
 
     lines = ut.cv.HoughLinesP(edges, 1, ut.np.pi/180, 80, None, 100, 10) #function used for finding coordinates x0,y0 and x1,y1 for deskew
-    tested_angles = ut.np.linspace(-ut.np.pi/2, ut.np.pi / 2, 360)
+    tested_angles = ut.np.linspace(0, ut.np.pi , 1080)
     h, theta, d = ut.hough_line(edges,tested_angles)#function used for plot histogram Hough transform
     
     if lines is not None:
@@ -128,21 +129,23 @@ def houghTransformDeskew(binarized_img,original_img, plot : bool = True):
             #write blue lines on image according to Hough lines
             l = lines[i][0]
             ut.cv.line(img_lines, (l[0], l[1]), (l[2], l[3]), (255,0,0), 3, ut.cv.LINE_AA)
-            angle += ut.math.atan2(l[3]*1.0 - l[1]*1.0,l[2]*1.0 - l[0]*1.0)
+            #angle += ut.math.atan2(l[3]*1.0 - l[1]*1.0,l[2]*1.0 - l[0]*1.0)
+            angle += ut.math.atan2(l[3] - l[1],l[2] - l[0])
            
         angle /= num_lines #averages between all found angles
         best_angle = angle* 180.0 / ut.np.pi #find the best angle in the right notation
         
          
-        #showImage('Detected Lines with Probabilistic Line Transform', img_lines)#non so se puo essere utile ai fini del progetto stampare le linee 
+        #ut.showImage('Detected Lines with Probabilistic Line Transform', img_lines)#non so se puo essere utile ai fini del progetto stampare le linee 
         
         height, width = original_img.shape[:2]
         center = (width // 2, height // 2)
+        
         if plot:
             print('The image is rotated of ', best_angle, ' degrees')
             #show histogram of Hough transform
             ut.plt.figure(figsize=(20,20))
-            ut.plt.imshow(ut.np.log(1 + h), extent=[ut.np.rad2deg(theta[-1]), ut.np.rad2deg(theta[0]), d[-1], d[0]], cmap ='nipy_spectral', aspect=1.0 / (height/30))
+            ut.plt.imshow(ut.np.log(1 + h), extent=[(ut.np.rad2deg(theta[-1])/2)*-1, ut.np.rad2deg(theta[-1])/2, d[-1], d[0]], cmap ='nipy_spectral', aspect=1.0 / (height/30))
             ut.plt.title('Histogram Hough Transform')
             ut.plt.show()
         #build the deskew

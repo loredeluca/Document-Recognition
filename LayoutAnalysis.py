@@ -91,13 +91,13 @@ def kNeighborsGraph(points, k):
     G : sparse K-Neighbors graph     
     '''
     
-    # k = len(X)-1 gives the exact MST
+    # k = len(X)-1 gives the maximum k-neighbors graph
     k = min(len(points) - 1, k)
     
     # generate a sparse graph using the k nearest neighbors of each point
     return ut.kneighbors_graph(points, n_neighbors=k, mode='distance')
 
-def minimumSpanningTreeEdges(points, k): 
+def minimumSpanningTreeEdges(points, k, peak_values=[]): 
     '''
     Builds a Minimum Spanning Tree from an list of coordinates (x, y)
     
@@ -114,8 +114,18 @@ def minimumSpanningTreeEdges(points, k):
     
     # Compute the minimum spanning tree of this graph
     full_tree = ut.minimum_spanning_tree(G, overwrite=True)
-
-    return full_tree,ut.np.array(full_tree.nonzero()).T 
+    mst_edges = ut.np.array(full_tree.nonzero()).T
+    if peak_values != []:
+        mst_dist = full_tree.data
+        my_mst_edges = []
+        for i in range(len(mst_dist)):
+            if mst_dist[i] < max(peak_values):
+                my_mst_edges.append(mst_edges[i])
+        
+        mst_edges = my_mst_edges
+        
+    
+    return full_tree, mst_edges
 
 def drawDelaunay(img, subdiv, delaunay_color) :
     '''
@@ -141,7 +151,20 @@ def drawDelaunay(img, subdiv, delaunay_color) :
             ut.cv.line(img, pt2, pt3, delaunay_color, 1, ut.cv.LINE_AA, 0)
             ut.cv.line(img, pt3, pt1, delaunay_color, 1, ut.cv.LINE_AA, 0)
 
-def drawVoronoi(img, subdiv) :
+def d(ifacets):
+    minD = ut.math.inf
+    print('minD',minD)
+    for i in range(len(ifacets)-1):
+        
+        x1,y1 = ifacets[i]
+        x2,y2 = ifacets[i+1]
+        dist = ut.euclidean_distance(ifacets[i],ifacets[i+1])
+        if dist != 0 and dist < minD:
+            minD = dist
+    print('minD',minD)
+    return minD
+
+def drawVoronoi(img, subdiv, peak_values) :
     '''
     Draw the Voronoi Area diagram using Delaunay subdivision.
     
@@ -151,42 +174,71 @@ def drawVoronoi(img, subdiv) :
     subdiv : Delaunay subdivision of points (centroids)
 
     '''
+    '''
+    Td1 = min(peak_values)
+    Td2 = max(peak_values)
+    Ta = 40
+    '''
     facets, _ = subdiv.getVoronoiFacetList([]) #get the Voronoi facet list 
-    blank_img = ut.np.ones([img.shape[0],img.shape[1]],dtype=ut.np.uint8)*255
+    #blank_img = ut.np.ones([img.shape[0],img.shape[1]],dtype=ut.np.uint8)*255
     
-    
+    #>= 1)  (((ut.euclidean_distance(ifacets[0][i],ifacets[0][i+1])/Td2) + area/Ta) >= 1)
     #img2 = img.copy()
+    '''
     voro_points = []
+    voro_points2 = []
+    cont = 0
+    '''
     for i in range(len(facets)) :
+        
+        
         ifacet_arr = []
         for f in facets[i] : #takes the numpy array of facet points and puts it in a new array
             ifacet_arr.append(f)
         ifacet = ut.np.array(ifacet_arr, ut.np.int) #makes the numpy array in a simple integer array
         ifacets = ut.np.array([ifacet])#builds an array of the previous integer array for make it compatible with the following method.
+        
+        
         height,width = img.shape[:2]
+        '''
         x_arr = []
         y_arr = []
-        area = ut.cv.contourArea(ifacets)
-        print('area',area)
-        if area>600:
-            for i in range(len(ifacets[0])-1):
-                x1,y1 = ifacets[0][i]
-                x2,y2 = ifacets[0][i+1]
-                #if(ut.euclidean_distance(ifacets[0][i],ifacets[0][i+1])<60):
-                ut.cv.line(img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-                ut.cv.line(blank_img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-                #voro_points.append((x1,y1))
-                        
-            #if x1>=0 and x2>=0 and y1>=0 and y2>=0:
-                #if x1<=width and x2<=width and y1<=height and y2<=height: 
-                    #print(euclidean_distance(ifacets[0][i],ifacets[0][i+1]))
-                    #if(euclidean_distance(ifacets[0][i],ifacets[0][i+1])<70):
-                if x1>=0 and y1>=0 :
+        
+        if cont != 0:
+            area = ut.cv.contourArea(ifacets)
+            areaOld = ut.cv.contourArea(old_ifacets)
+            Ar = max(area,areaOld)/min(area,areaOld)
+        else:
+            Ar = 0
+        '''
+        #print('area',area)
+        #if area>600:
+        for i in range(len(ifacets[0])-1):
+            x1,y1 = ifacets[0][i]
+            x2,y2 = ifacets[0][i+1]
+            '''
+            if x1>=0 and y1>=0 :
                     if x1<=width and y1<=height:        
                         voro_points.append((x1,y1))
-                    
+            if ((d(ifacets[0])/Td1 >=1) or ((d(ifacets[0])/Td2) + Ar/Ta) >= 1):
+                ut.cv.line(img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
+                ut.cv.line(blank_img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
+            '''
+                #voro_points.append((x1,y1))
+                        
+            if x1>=0 and x2>=0 and y1>=0 and y2>=0:
+                if x1<=width and x2<=width and y1<=height and y2<=height: 
+                    #print(euclidean_distance(ifacets[0][i],ifacets[0][i+1]))
+                    #if(euclidean_distance(ifacets[0][i],ifacets[0][i+1])<70):
+                    ut.cv.line(img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
+                    #ut.cv.line(blank_img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
+                '''
+                if x1>=0 and y1>=0 :
+                    if x1<=width and y1<=height:        
+                        voro_points2.append((x1,y1))
+                '''   
             
-            x1,y1 = ifacets[0][len(ifacets[0])-1]
+            #x1,y1 = ifacets[0][len(ifacets[0])-1]
             #voro_points.append((x1,y1))
         '''
         if len(x_arr) != len(y_arr):
@@ -198,10 +250,15 @@ def drawVoronoi(img, subdiv) :
         #cv.polylines(img2, ifacets, True, (255, 0, 0), 1, cv.LINE_AA, 0)#draws facet lines from the array of array ifacets
     #showImage('met 1',img)
     #showImage('met 2',img2)
+    '''
     ut.showImage('White + voro', blank_img)
-    return voro_points, ~blank_img
+    cont += 1
+    old_ifacets = ifacets.copy()
+    '''
+    
+    #return voro_points, voro_points2 , ~blank_img
 
-def voronoi(points,img):
+def voronoi(points,img, peak_values):
     '''
     Build Delaunay Triangulation and Voronoi Area 
     
@@ -222,25 +279,29 @@ def voronoi(points,img):
     drawDelaunay(img, subdiv, (0, 0, 255)) #draw the triangulation using Delaunay subdivision.
     for p in points :
         ut.cv.circle(img, p, 2, (255,0,0), ut.cv.FILLED, ut.cv.LINE_AA, 0 )
-    voro_points, voro_blank_inv = drawVoronoi(img_voronoi,subdiv) #draw the Voronoi diagram using Delaunay subdivision.
+    #voro_points, voro_blank_inv = drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
+    drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
+    
     
     ut.showImage('Delaunay Triangulation',img)
     ut.showImage('Voronoi Diagram',img_voronoi)
     
-    return img, img_voronoi, voro_points, voro_blank_inv
+    #return img, img_voronoi, voro_points, voro_blank_inv
+    return img, img_voronoi
     
     
 def docstrum(input_img, output_img, edges, points, thresh_dist):
-    ut.plt.figure(figsize=(30,20))
-    ut.plt.imshow(input_img, 'gray')    
+    points = ut.np.int32(points)
+    #ut.plt.figure(figsize=(30,20))
+    #ut.plt.imshow(input_img, 'gray')    
     for edge in edges:
         i,j = edge[2]
         distan = edge[1]
         
         if distan < thresh_dist:
             ut.cv.line(output_img, (points[i, 0], points[i, 1]), (points[j, 0], points[j, 1]), (0,0,0), 3, ut.cv.LINE_AA)
-            ut.plt.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c='r')
-    ut.plt.show()    
+            #ut.plt.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c='r')
+    #ut.plt.show()    
     
 def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
     if verticalCut:
