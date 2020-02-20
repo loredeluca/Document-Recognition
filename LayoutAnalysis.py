@@ -1,11 +1,11 @@
 import Utils as ut
 import PreProcessing as pp
-
+#DA RIMUOVERE---------------------------------------------------
 import itertools
 import operator
 
 
-#DA RIMUOVERE---------------------------------------------------
+
 class Node:
     def __init__(self):
         self.name: str = ''
@@ -61,7 +61,7 @@ def findCentroids(binarized_img,output_img):
     -------
     points : array of coordinates (x,y) about the finded centroids, sorted in increasing order. 
     '''
-    contours,_  = ut.cv.findContours(ut.np.uint8(ut.np.logical_not(binarized_img)),ut.cv.RETR_EXTERNAL,ut.cv.CHAIN_APPROX_SIMPLE) 
+    contours,_  = ut.cv.findContours(~binarized_img,ut.cv.RETR_EXTERNAL,ut.cv.CHAIN_APPROX_SIMPLE) 
     points = []
     for contour in contours:
         M = ut.cv.moments(contour)
@@ -174,21 +174,23 @@ def drawVoronoi(img, subdiv, peak_values) :
     subdiv : Delaunay subdivision of points (centroids)
 
     '''
-    '''
+    
     Td1 = min(peak_values)
     Td2 = max(peak_values)
     Ta = 40
-    '''
-    facets, _ = subdiv.getVoronoiFacetList([]) #get the Voronoi facet list 
-    #blank_img = ut.np.ones([img.shape[0],img.shape[1]],dtype=ut.np.uint8)*255
+    
+    facets, facets_centers = subdiv.getVoronoiFacetList([]) #get the Voronoi facet list 
+    blank_img = ut.np.ones([img.shape[0],img.shape[1]],dtype=ut.np.uint8)*255
+    
+    
     
     #>= 1)  (((ut.euclidean_distance(ifacets[0][i],ifacets[0][i+1])/Td2) + area/Ta) >= 1)
     #img2 = img.copy()
-    '''
+    
     voro_points = []
     voro_points2 = []
     cont = 0
-    '''
+    
     for i in range(len(facets)) :
         
         
@@ -200,7 +202,7 @@ def drawVoronoi(img, subdiv, peak_values) :
         
         
         height,width = img.shape[:2]
-        '''
+        
         x_arr = []
         y_arr = []
         
@@ -210,36 +212,34 @@ def drawVoronoi(img, subdiv, peak_values) :
             Ar = max(area,areaOld)/min(area,areaOld)
         else:
             Ar = 0
-        '''
+        
         #print('area',area)
         #if area>600:
         for i in range(len(ifacets[0])-1):
             x1,y1 = ifacets[0][i]
             x2,y2 = ifacets[0][i+1]
-            '''
+            
             if x1>=0 and y1>=0 :
                     if x1<=width and y1<=height:        
                         voro_points.append((x1,y1))
             if ((d(ifacets[0])/Td1 >=1) or ((d(ifacets[0])/Td2) + Ar/Ta) >= 1):
                 ut.cv.line(img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
                 ut.cv.line(blank_img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-            '''
+            
                 #voro_points.append((x1,y1))
-                        
+            '''            
             if x1>=0 and x2>=0 and y1>=0 and y2>=0:
                 if x1<=width and x2<=width and y1<=height and y2<=height: 
                     #print(euclidean_distance(ifacets[0][i],ifacets[0][i+1]))
                     #if(euclidean_distance(ifacets[0][i],ifacets[0][i+1])<70):
                     ut.cv.line(img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
                     #ut.cv.line(blank_img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-                '''
-                if x1>=0 and y1>=0 :
-                    if x1<=width and y1<=height:        
-                        voro_points2.append((x1,y1))
-                '''   
+            '''
+                
+                  
             
-            #x1,y1 = ifacets[0][len(ifacets[0])-1]
-            #voro_points.append((x1,y1))
+            x1,y1 = ifacets[0][len(ifacets[0])-1]
+            voro_points.append((x1,y1))
         '''
         if len(x_arr) != len(y_arr):
             print('AHAHAHAHAH')
@@ -250,13 +250,13 @@ def drawVoronoi(img, subdiv, peak_values) :
         #cv.polylines(img2, ifacets, True, (255, 0, 0), 1, cv.LINE_AA, 0)#draws facet lines from the array of array ifacets
     #showImage('met 1',img)
     #showImage('met 2',img2)
-    '''
+    
     ut.showImage('White + voro', blank_img)
     cont += 1
     old_ifacets = ifacets.copy()
-    '''
     
-    #return voro_points, voro_points2 , ~blank_img
+    
+    return voro_points , ~blank_img
 
 def voronoi(points,img, peak_values):
     '''
@@ -279,15 +279,15 @@ def voronoi(points,img, peak_values):
     drawDelaunay(img, subdiv, (0, 0, 255)) #draw the triangulation using Delaunay subdivision.
     for p in points :
         ut.cv.circle(img, p, 2, (255,0,0), ut.cv.FILLED, ut.cv.LINE_AA, 0 )
-    #voro_points, voro_blank_inv = drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
-    drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
+    voro_points, voro_blank_inv = drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
+    #drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
     
     
     ut.showImage('Delaunay Triangulation',img)
     ut.showImage('Voronoi Diagram',img_voronoi)
     
-    #return img, img_voronoi, voro_points, voro_blank_inv
-    return img, img_voronoi
+    return img, img_voronoi, voro_points, voro_blank_inv
+    #return img, img_voronoi
     
     
 def docstrum(input_img, output_img, edges, points, thresh_dist):
@@ -456,3 +456,23 @@ def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
     #print(XY_Tree)
     #return pippo,typeNode,label
     #return typeNode,label
+    
+def getTextFile(path,names_file,output_file):
+    f = open(output_file,'w')
+    #path='images/XY_Tree'
+    filelist = []
+    for infile in ut.glob.glob (ut.os.path.join (path, names_file)):
+        filelist.append (infile)
+        filelist.sort()
+        x=0
+    for file in filelist:
+        f.write('------------ Section '+ str(x) +'------------\n')
+        img = ut.cv.imread(file)
+        text = ut.pytesseract.image_to_string(ut.Image.open(file))
+        ut.plt.imshow(img,'gray')
+        ut.plt.show()
+        print(text)
+        f.write(text+'\n')
+        x+=1
+    f.close()
+    return f

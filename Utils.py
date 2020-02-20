@@ -14,6 +14,9 @@ from scipy.sparse.csgraph import minimum_spanning_tree
 from sklearn.neighbors import kneighbors_graph
 from collections import defaultdict  
 from scipy.signal import find_peaks
+from PIL import Image
+import pytesseract
+import argparse
 import heapq
 import PreProcessing as pp
 import LayoutAnalysis as la
@@ -32,7 +35,7 @@ def showImage(text_name, file_name):
     cv.imwrite(text_name+'.tif', file_name)
     #cv.imwrite(text_name, file_name)
     cv.waitKey(0)
-    cv.destroyWindow(text_name)
+    #cv.destroyWindow(text_name)
     
 def removeFiguresOrSpots(binarized_img, mode):
     '''
@@ -122,6 +125,7 @@ def findMidDistanceContour(binarized_img,vert: bool = False):
 #trova la distanza tra centroidi
 def findDistance(binarized_img, vert: bool = False):
     points = la.findCentroids(binarized_img,binarized_img.copy())
+    print(points)
     G,edges = la.minimumSpanningTreeEdges(points,5)
     edges_dist = G.data
     edges_hor,edges_vert = edgesInformation(edges,points,edges_dist)
@@ -257,7 +261,7 @@ def edgesInformation(edges, points, distances):
 def polyArea(x,y):
     return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
 
-def findPeaks(k_kneighbors_distances):
+def findPeaks(k_kneighbors_distances, plot: bool=False):
     d = defaultdict(int)
     
     for k in k_kneighbors_distances:
@@ -265,10 +269,6 @@ def findPeaks(k_kneighbors_distances):
         d[k] += 1
         
     result = sorted(d.items(), key = lambda x:x[1], reverse=True)
-    #result = []
-    
-    #result = [(23.0, 995), (24.0, 943), (25.0, 719), (22.0, 604), (21.0, 520), (20.0, 438), (19.0, 397), (8.0, 358), (9.0, 356), (17.0, 328), (26.0, 328), (10.0, 326), (18.0, 280), (15.0, 268), (12.0, 266), (16.0, 250), (11.0, 232), (13.0, 232), (14.0, 196), (7.0, 188), (27.0, 175), (28.0, 100), (29.0, 98), (6.0, 82), (30.0, 72), (31.0, 50), (34.0, 42), (33.0, 40), (32.0, 39), (35.0, 39), (36.0, 29), (49.0, 24), (44.0, 22), (38.0, 20), (37.0, 19), (40.0, 19), (51.0, 16), (41.0, 14), (5.0, 14), (55.0, 14), (45.0, 13), (47.0, 13), (53.0, 13), (58.0, 12), (42.0, 12), (39.0, 12), (48.0, 12), (52.0, 11), (50.0, 10), (43.0, 8), (54.0, 7), (56.0, 7), (57.0, 5), (70.0, 3), (46.0, 3), (77.0, 3), (76.0, 2), (72.0, 2), (61.0, 2), (4.0, 2)]
-    print(result)
     
     values = []
     occurrences = []
@@ -284,37 +284,31 @@ def findPeaks(k_kneighbors_distances):
     sortId = np.argsort(x)
     x = x[sortId]
     y = y[sortId]
-    print('x ',x)
-    print('y ',y)
+
     #Trovo i punti di ottimo locale
     peaks, _ = find_peaks(y, distance= 25)
 
-    print('peaks', peaks)
-    
     peaksOccurrenceList=[]
     peaksOccurrences=[]
     for i in range(len(peaks)):
         peaksOccurrences.append(y[peaks[i]])
         peaksOccurrenceList.append((x[peaks[i]],y[peaks[i]]))
     peaksOccurrenceList = sorted(peaksOccurrenceList, key = lambda x:x[1], reverse=True)
-    print('peackOccurrences',peaksOccurrences)
-
+    
     #Trova i DUE picchi piu alti 
     bestPeaks=heapq.nlargest(2, peaksOccurrences)
-    print(bestPeaks)
 
 
     my_Peak_Value=[]
     for k in range(len(peaksOccurrenceList)):
         if bestPeaks[0]==peaksOccurrenceList[k][1] or bestPeaks[1]==peaksOccurrenceList[k][1]:
             my_Peak_Value.append(int(peaksOccurrenceList[k][0]))  
-        
-    print(my_Peak_Value)
     
-    # PLOT
-    plt.plot(x, y)
-    plt.plot(my_Peak_Value, bestPeaks, "x")
-    plt.xlim(0, 80)
-    plt.show()
+    
+    if plot:
+        plt.plot(x, y)
+        plt.plot(my_Peak_Value, bestPeaks, "x")
+        plt.xlim(0, 80)
+        plt.show()
     
     return my_Peak_Value
