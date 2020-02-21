@@ -164,7 +164,7 @@ def d(ifacets):
     print('minD',minD)
     return minD
 
-def drawVoronoi(img, subdiv, peak_values) :
+def drawVoronoi(img, subdiv, points, peak_values) :
     '''
     Draw the Voronoi Area diagram using Delaunay subdivision.
     
@@ -174,89 +174,68 @@ def drawVoronoi(img, subdiv, peak_values) :
     subdiv : Delaunay subdivision of points (centroids)
 
     '''
-    
+    img_voro_full = img.copy()
+    img_bin = pp.binarization('Sauvola',img.copy())
+    Graph = kNeighborsGraph(points,6)           
+    k_kneighbors_edges = ut.np.array(Graph.nonzero()).T
+    k_kneighbors_distances = Graph.data
+    facets, facets_centers = subdiv.getVoronoiFacetList([]) #get the Voronoi facet list 
+    #valori picco
+    #peak_valuess = ut.findPeaks(k_kneighbors_distances,10,plot = True)
     Td1 = min(peak_values)
     Td2 = max(peak_values)
     Ta = 40
     
-    facets, facets_centers = subdiv.getVoronoiFacetList([]) #get the Voronoi facet list 
-    blank_img = ut.np.ones([img.shape[0],img.shape[1]],dtype=ut.np.uint8)*255
+    height, width = img.shape[:2]
+    img_white = ut.np.ones([height,width,3],dtype='uint8')*255
+    
+    for i in range(len(facets)):
+        facet = ut.np.array([facets[i]],ut.np.int)
+        ut.cv.polylines(img_voro_full, facet, True, (0, 0, 255), 1, ut.cv.LINE_AA, 0)
+        ut.cv.polylines(img_white, facet, True, (0, 0, 255), 1, ut.cv.LINE_AA, 0)
     
     
+    new_edges = []
+    for a in range(len(k_kneighbors_edges)):
+        i,j = k_kneighbors_edges[a] 
+        dist = k_kneighbors_distances[a]
+        p1 = points[i]
+        p2 = points[j]
+        facet1 = facets[i]
+        facet2 = facets[j]
+        area1 = ut.cv.contourArea(facet1)
+        area2 = ut.cv.contourArea(facet2)
     
-    #>= 1)  (((ut.euclidean_distance(ifacets[0][i],ifacets[0][i+1])/Td2) + area/Ta) >= 1)
-    #img2 = img.copy()
-    
-    voro_points = []
-    voro_points2 = []
-    cont = 0
-    
-    for i in range(len(facets)) :
-        
-        
-        ifacet_arr = []
-        for f in facets[i] : #takes the numpy array of facet points and puts it in a new array
-            ifacet_arr.append(f)
-        ifacet = ut.np.array(ifacet_arr, ut.np.int) #makes the numpy array in a simple integer array
-        ifacets = ut.np.array([ifacet])#builds an array of the previous integer array for make it compatible with the following method.
-        
-        
-        height,width = img.shape[:2]
-        
-        x_arr = []
-        y_arr = []
-        
-        if cont != 0:
-            area = ut.cv.contourArea(ifacets)
-            areaOld = ut.cv.contourArea(old_ifacets)
-            Ar = max(area,areaOld)/min(area,areaOld)
-        else:
-            Ar = 0
-        
-        #print('area',area)
-        #if area>600:
-        for i in range(len(ifacets[0])-1):
-            x1,y1 = ifacets[0][i]
-            x2,y2 = ifacets[0][i+1]
+        Ar = max(area1,area2)/min(area1,area2) #inutile basta prendere arr[i]
+        for k in range(len(facet1)):
+            x1,y1 = facet1[k]
+            x2,y2 = facet1[(k+1)%(len(facet1))]
+        if ut.intersect(p1,p2,(x1,y1),(x2,y2)) and ((dist/Td1 <1.2) or (dist/Td2 + Ar/Ta)<1.15):
+            new_edges.append((i,j))
             
-            if x1>=0 and y1>=0 :
-                    if x1<=width and y1<=height:        
-                        voro_points.append((x1,y1))
-            if ((d(ifacets[0])/Td1 >=1) or ((d(ifacets[0])/Td2) + Ar/Ta) >= 1):
-                ut.cv.line(img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-                ut.cv.line(blank_img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-            
-                #voro_points.append((x1,y1))
-            '''            
-            if x1>=0 and x2>=0 and y1>=0 and y2>=0:
-                if x1<=width and x2<=width and y1<=height and y2<=height: 
-                    #print(euclidean_distance(ifacets[0][i],ifacets[0][i+1]))
-                    #if(euclidean_distance(ifacets[0][i],ifacets[0][i+1])<70):
-                    ut.cv.line(img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-                    #ut.cv.line(blank_img, (x1, y1), (x2, y2), (0,0,255), 1, ut.cv.LINE_AA)
-            '''
-                
-                  
-            
-            x1,y1 = ifacets[0][len(ifacets[0])-1]
-            voro_points.append((x1,y1))
-        '''
-        if len(x_arr) != len(y_arr):
-            print('AHAHAHAHAH')
-        area = ut.polyArea(x_arr,y_arr)
-        print('area', area)
-        '''
+            ut.cv.line(img_white, (x1,y1), (x2, y2), (255,255,255), 1, ut.cv.LINE_AA)
+        for m in range(len(facet2)):
+            x1,y1 = facet2[m]
+            x2,y2 = facet2[(m+1)%(len(facet2))]
+            if ut.intersect(p1,p2,(x1,y1),(x2,y2)) and ((dist/Td1 <1.2) or (dist/Td2 + Ar/Ta)<1.15):
+                new_edges.append((i,j))
+                ut.cv.line(img_white, (x1,y1), (x2, y2), (255,255,255), 1, ut.cv.LINE_AA)
     
-        #cv.polylines(img2, ifacets, True, (255, 0, 0), 1, cv.LINE_AA, 0)#draws facet lines from the array of array ifacets
-    #showImage('met 1',img)
-    #showImage('met 2',img2)
+    img_edges = ut.plotEdges(img,new_edges,points)  
+    bin_edges = pp.binarization('Otsu',img_edges)
     
-    ut.showImage('White + voro', blank_img)
-    cont += 1
-    old_ifacets = ifacets.copy()
+    img_white = pp.binarization('Otsu',img_white)
+    kernel = ut.np.ones((4,4), ut.np.uint8) 
+    img_dil = ut.cv.dilate(~img_white, kernel, iterations=1)
     
+    kernel = ut.np.ones((3,3), ut.np.uint8) 
+    img_ero = ut.cv.erode(img_dil, kernel, iterations=1)
+    img_voro_edge = ~img_ero
     
-    return voro_points , ~blank_img
+    img_voro_segm = ut.cv.add(~img_bin, ~img_voro_edge)
+    
+    return bin_edges,img_voro_full,~img_voro_segm
+
 
 def voronoi(points,img, peak_values):
     '''
@@ -265,7 +244,7 @@ def voronoi(points,img, peak_values):
     Parameters
     ----------
     points : array of coordinates (x,y) about the centroids.
-    img: array of image pixels.
+    img: array of image pixels. (this will be modified at the end of the method)
     '''
     img_voronoi = img.copy()
     size = img.shape
@@ -279,15 +258,7 @@ def voronoi(points,img, peak_values):
     drawDelaunay(img, subdiv, (0, 0, 255)) #draw the triangulation using Delaunay subdivision.
     for p in points :
         ut.cv.circle(img, p, 2, (255,0,0), ut.cv.FILLED, ut.cv.LINE_AA, 0 )
-    voro_points, voro_blank_inv = drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
-    #drawVoronoi(img_voronoi,subdiv, peak_values) #draw the Voronoi diagram using Delaunay subdivision.
-    
-    
-    ut.showImage('Delaunay Triangulation',img)
-    ut.showImage('Voronoi Diagram',img_voronoi)
-    
-    return img, img_voronoi, voro_points, voro_blank_inv
-    #return img, img_voronoi
+    return drawVoronoi(img_voronoi,subdiv,points,peak_values) #draw the Voronoi diagram using Delaunay subdivision.
     
     
 def docstrum(input_img, output_img, edges, points, thresh_dist):
@@ -308,7 +279,7 @@ def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
         image_bin = image_bin.T
         
     #Counting black pixels per row (axis=0: col, axis=1:row)
-    counts,_ = ut.projection(image_bin)
+    counts,_ = pp.projection(image_bin)
 
     #cut contiene tutte le righe che hanno meno di nPixel pixel
     cut=[]
@@ -456,6 +427,25 @@ def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
     #print(XY_Tree)
     #return pippo,typeNode,label
     #return typeNode,label
+
+def getTextFileFromImage(binarized_img,coordinates,path,output_file):
+    f = open(output_file,'w')
+    for i in range(len(coordinates)):
+        [x,y,w,h] = coordinates[i]
+        f.write('------------ Section '+ str(i+1) +'------------\n')
+        croped = binarized_img[y:y+h, x:x+w].copy()
+        blackPixels=ut.cv.countNonZero(~croped)
+        whitePixels=ut.cv.countNonZero(croped)
+        perc=int((blackPixels/(whitePixels+blackPixels))*100)
+        print('number of black pixel:',perc,'%')
+        if perc<40:
+            text = ut.pytesseract.image_to_string(croped)
+        else:
+            text = 'IMAGE'
+        ut.showImage('croped',croped)
+        print(text)
+        f.write(text+'\n')
+    f.close()
     
 def getTextFile(path,names_file,output_file):
     f = open(output_file,'w')
@@ -468,7 +458,15 @@ def getTextFile(path,names_file,output_file):
     for file in filelist:
         f.write('------------ Section '+ str(x) +'------------\n')
         img = ut.cv.imread(file)
-        text = ut.pytesseract.image_to_string(ut.Image.open(file))
+        img_bin=pp.binarization('otsu',img)
+        blackPixels=ut.cv.countNonZero(~img_bin)
+        whitePixels=ut.cv.countNonZero(img_bin)
+        perc=int((blackPixels/(whitePixels+blackPixels))*100)
+        print('number of black pixel:',perc,'%')
+        if perc<40:
+            text = ut.pytesseract.image_to_string(ut.Image.open(file))
+        else:
+            text = 'IMAGE'
         ut.plt.imshow(img,'gray')
         ut.plt.show()
         print(text)

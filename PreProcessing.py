@@ -19,9 +19,9 @@ def binarization(mode,image):
     
     if image.ndim >2:
         image = ut.cv.cvtColor(image, ut.cv.COLOR_BGR2GRAY)
-    if mode == 'otsu':
+    if mode == 'Otsu':
         return ut.binarize(image, ut.threshold_otsu(image))*255
-    elif mode == 'sauvola':
+    elif mode == 'Sauvola':
         return ut.binarize(image, ut.threshold_sauvola(image))*255
     elif mode == 'inverse':
         _,thresh = ut.cv.threshold(image,127,255,ut.cv.THRESH_BINARY_INV)
@@ -99,7 +99,7 @@ def valueRLSA(binarized_img, vert: bool = False):
     value -= midW
     return round(value),distances
 
-def houghTransformDeskew(binarized_img,original_img, plot : bool = True):
+def houghTransformDeskew(binarized_img,original_img, plot : bool = False):
     '''
     Compute deskew angle using Hough transform, it also plot the histogram of Hough
     transform and build the deskew of the image.
@@ -142,7 +142,7 @@ def houghTransformDeskew(binarized_img,original_img, plot : bool = True):
         center = (width // 2, height // 2)
         
         if plot:
-            print('The image is rotated of ', best_angle, ' degrees')
+            print('The image is rotated of {:.2f} degrees'.format(best_angle))
             #show histogram of Hough transform
             ut.plt.figure(figsize=(20,20))
             ut.plt.imshow(ut.np.log(1 + h), extent=[(ut.np.rad2deg(theta[-1])/2)*-1, ut.np.rad2deg(theta[-1])/2, d[-1], d[0]], cmap ='nipy_spectral', aspect=1.0 / (height/30))

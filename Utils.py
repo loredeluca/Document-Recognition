@@ -16,6 +16,7 @@ from collections import defaultdict
 from scipy.signal import find_peaks
 from PIL import Image
 import pytesseract
+pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 import argparse
 import heapq
 import PreProcessing as pp
@@ -33,9 +34,8 @@ def showImage(text_name, file_name):
     cv.namedWindow(text_name, cv.WINDOW_NORMAL)
     cv.imshow(text_name, file_name)
     cv.imwrite(text_name+'.tif', file_name)
-    #cv.imwrite(text_name, file_name)
     cv.waitKey(0)
-    #cv.destroyWindow(text_name)
+    cv.destroyWindow(text_name)
     
 def removeFiguresOrSpots(binarized_img, mode):
     '''
@@ -51,6 +51,11 @@ def removeFiguresOrSpots(binarized_img, mode):
     -------
     new_img : array of original image pixels without figures or spots.
     '''
+    if mode != 'figures':
+        kernel = np.ones((3,2), np.uint8) 
+        binarized_img = cv.dilate(~binarized_img, kernel, iterations=1)
+        binarized_img = cv.erode(binarized_img, kernel, iterations=1)
+        binarized_img = ~binarized_img
     new_img = binarized_img.copy()
     if new_img.ndim >2:
         new_img = cv.cvtColor(new_img, cv.COLOR_BGR2GRAY)
@@ -64,7 +69,7 @@ def removeFiguresOrSpots(binarized_img, mode):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
         elif mode == 'spots':
-            if ((0<=w<=7) and (0<=h<=7)):  #DACONTROLLARE (RIMUOVE PUNTI)
+            if ((0<=w<=5) and (0<=h<=5)):  #DACONTROLLARE (RIMUOVE PUNTI)
                 for i in range(y,y+h):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
@@ -79,7 +84,7 @@ def removeFiguresOrSpots(binarized_img, mode):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
         elif mode == 'linesBoth':
-            if (w>100 and h<25) or (h>100 and w<25):
+            if (w>50 and h<25) or (h>50 and w<25):
                 for i in range(y,y+h):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
@@ -96,13 +101,19 @@ def printContours(binarized_img,output_img, thickness):
     binarized_img : array of binarized image pixels.
     output_img: array of output image pixels. This will be modified at the end of the method.
     '''
-    
+    box_coordinates = []
     #contours,_  = cv.findContours(np.uint8(np.logical_not(binarized_img)),cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
     contours,_  = cv.findContours(~binarized_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
     for contour in contours:
         [x,y,w,h] = cv.boundingRect(contour)
         if w >= 4 and h >= 4:
             cv.rectangle(output_img, (x,y), (x+w,y+h), (0, 255, 0), thickness)
+        if w >= 100 and h >= 100:
+            box_coordinates.append([x,y,w,h])
+    box_coordinates = sorted(box_coordinates, key = lambda z:z[1])
+    box_coordinates = sorted(box_coordinates, key = lambda z:z[0])
+    return box_coordinates
+            
             
             
 def findMidDistanceContour(binarized_img,vert: bool = False):
@@ -125,7 +136,7 @@ def findMidDistanceContour(binarized_img,vert: bool = False):
 #trova la distanza tra centroidi
 def findDistance(binarized_img, vert: bool = False):
     points = la.findCentroids(binarized_img,binarized_img.copy())
-    print(points)
+    
     G,edges = la.minimumSpanningTreeEdges(points,5)
     edges_dist = G.data
     edges_hor,edges_vert = edgesInformation(edges,points,edges_dist)
@@ -231,14 +242,12 @@ def getAngles(edges,points):
 def plotEdges(img, edges, points):
     points = np.int32(points)
     output_img = img.copy()
-    plt.figure(figsize=(30,20))
-    plt.imshow(img, 'gray')  
+      
     for edge in edges:
-        #i, j = edge
+        
         i,j = edge
         cv.line(output_img, (points[i, 0], points[i, 1]), (points[j, 0], points[j, 1]), (0,0,0), 1, cv.LINE_AA)
-        plt.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c='r')
-    plt.show() 
+         
     return output_img
 
 def edgesInformation(edges, points, distances):
@@ -261,7 +270,15 @@ def edgesInformation(edges, points, distances):
 def polyArea(x,y):
     return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
 
-def findPeaks(k_kneighbors_distances, plot: bool=False):
+def counterClockwise(A,B,C):
+    return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+
+# Return true if line segments AB and CD intersect
+def intersect(A,B,C,D):
+    return counterClockwise(A,C,D) != counterClockwise(B,C,D) and counterClockwise(A,B,C) != counterClockwise(A,B,D)  
+
+
+def findPeaks(k_kneighbors_distances, distance: int=0, plot: bool=False):
     d = defaultdict(int)
     
     for k in k_kneighbors_distances:
@@ -286,7 +303,11 @@ def findPeaks(k_kneighbors_distances, plot: bool=False):
     y = y[sortId]
 
     #Trovo i punti di ottimo locale
-    peaks, _ = find_peaks(y, distance= 25)
+    if(distance!=0):
+        peaks, _ = find_peaks(y, distance= distance)
+    else:
+        peaks, _ = find_peaks(y)
+
 
     peaksOccurrenceList=[]
     peaksOccurrences=[]
@@ -310,5 +331,5 @@ def findPeaks(k_kneighbors_distances, plot: bool=False):
         plt.plot(my_Peak_Value, bestPeaks, "x")
         plt.xlim(0, 80)
         plt.show()
-    
+        print('Peak values for this image are',my_Peak_Value)
     return my_Peak_Value
