@@ -1,10 +1,9 @@
 import Utils as ut
 import PreProcessing as pp
-#DA RIMUOVERE---------------------------------------------------
+#ATTENTION use this part of code if you have problems with the library igraph---------------------------------------------------
+#You have to comment and uncommend some part of the code in the method cut_matrix()
 import itertools
 import operator
-
-
 
 class Node:
     def __init__(self):
@@ -46,7 +45,7 @@ class Node:
                         children_lines)),range(max_height))))
         else:
             return self.name
-#----------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------
 
 def findCentroids(binarized_img,output_img):
     '''
@@ -59,7 +58,7 @@ def findCentroids(binarized_img,output_img):
 
     Returns
     -------
-    points : array of coordinates (x,y) about the finded centroids, sorted in increasing order. 
+    points : array of coordinates (x,y) about the found centroids, sorted in increasing order. 
     '''
     contours,_  = ut.cv.findContours(~binarized_img,ut.cv.RETR_EXTERNAL,ut.cv.CHAIN_APPROX_SIMPLE) 
     points = []
@@ -87,7 +86,7 @@ def kNeighborsGraph(points, k):
     points : array of coordinates (x,y).
     k : int the number of neighbor to consider for each vector.
     
-    Returns:
+    Returns
     G : sparse K-Neighbors graph     
     '''
     
@@ -105,10 +104,11 @@ def minimumSpanningTreeEdges(points, k, peak_values=[]):
     ----------
     points : array of coordinates (x,y).
     k : int the number of neighbor to consider for each vector.
+    peak_values: integer values of best two peak distances
     
-    Returns:
-    full_tree :
-    edges : numpy array of connected nodes in the MST. Index couple of points.     
+    Returns
+    full_tree: sparse K-Neighbors graph 
+    mst_edges : numpy array of connected nodes in the MST. Index couple of points.     
     '''
     G = kNeighborsGraph(points, k)
     
@@ -124,10 +124,9 @@ def minimumSpanningTreeEdges(points, k, peak_values=[]):
         
         mst_edges = my_mst_edges
         
-    
     return full_tree, mst_edges
 
-def drawDelaunay(img, subdiv, delaunay_color) :
+def drawDelaunay(image, subdiv, delaunay_color) :
     '''
     Draw the Delaunay triangulation using Delaunay subdivision.
     
@@ -139,7 +138,7 @@ def drawDelaunay(img, subdiv, delaunay_color) :
 
     '''
     triangleList = subdiv.getTriangleList() #gets the triangle list from Delaunay subdivision
-    size = img.shape
+    size = image.shape
     rect = (0, 0, size[1], size[0])
 
     for t in triangleList:
@@ -147,53 +146,47 @@ def drawDelaunay(img, subdiv, delaunay_color) :
         pt2 = (t[2], t[3])
         pt3 = (t[4], t[5])
         if ut.rectContains(rect, pt1) and ut.rectContains(rect, pt2) and ut.rectContains(rect, pt3) :
-            ut.cv.line(img, pt1, pt2, delaunay_color, 1, ut.cv.LINE_AA, 0)
-            ut.cv.line(img, pt2, pt3, delaunay_color, 1, ut.cv.LINE_AA, 0)
-            ut.cv.line(img, pt3, pt1, delaunay_color, 1, ut.cv.LINE_AA, 0)
+            ut.cv.line(image, pt1, pt2, delaunay_color, 1, ut.cv.LINE_AA, 0)
+            ut.cv.line(image, pt2, pt3, delaunay_color, 1, ut.cv.LINE_AA, 0)
+            ut.cv.line(image, pt3, pt1, delaunay_color, 1, ut.cv.LINE_AA, 0)
 
-def d(ifacets):
-    minD = ut.math.inf
-    print('minD',minD)
-    for i in range(len(ifacets)-1):
-        
-        x1,y1 = ifacets[i]
-        x2,y2 = ifacets[i+1]
-        dist = ut.euclidean_distance(ifacets[i],ifacets[i+1])
-        if dist != 0 and dist < minD:
-            minD = dist
-    print('minD',minD)
-    return minD
 
-def drawVoronoi(img, subdiv, points, peak_values) :
+
+def drawVoronoi(image, subdiv, points, peak_values) :
     '''
     Draw the Voronoi Area diagram using Delaunay subdivision.
     
     Parameters
     ----------
-    img: array of image pixels.
+    image: array of image pixels.
     subdiv : Delaunay subdivision of points (centroids)
-
+    points: array of float pair coordinates x,y
+    peak_values: integer values of best two peak distances
+    
+    Returns
+    -------
+    bin_edges: array of image pixels binarized with Voronoi edges drawn 
+    img_voro_full: array of image pixels with all Voronoi cells drawn
+    img_voro_segm: array of image pixels with segmentation of Voronoi cells
     '''
-    img_voro_full = img.copy()
-    img_bin = pp.binarization('Sauvola',img.copy())
+    img_voro_full = image.copy()
+    img_bin = pp.binarization('Sauvola',image.copy())
     Graph = kNeighborsGraph(points,6)           
     k_kneighbors_edges = ut.np.array(Graph.nonzero()).T
     k_kneighbors_distances = Graph.data
-    facets, facets_centers = subdiv.getVoronoiFacetList([]) #get the Voronoi facet list 
-    #valori picco
-    #peak_valuess = ut.findPeaks(k_kneighbors_distances,10,plot = True)
+    facets, _ = subdiv.getVoronoiFacetList([]) #get the Voronoi facet list 
+    
     Td1 = min(peak_values)
     Td2 = max(peak_values)
-    Ta = 40
+    Ta = 40 
     
-    height, width = img.shape[:2]
+    height, width = image.shape[:2]
     img_white = ut.np.ones([height,width,3],dtype='uint8')*255
     
     for i in range(len(facets)):
         facet = ut.np.array([facets[i]],ut.np.int)
         ut.cv.polylines(img_voro_full, facet, True, (0, 0, 255), 1, ut.cv.LINE_AA, 0)
         ut.cv.polylines(img_white, facet, True, (0, 0, 255), 1, ut.cv.LINE_AA, 0)
-    
     
     new_edges = []
     for a in range(len(k_kneighbors_edges)):
@@ -206,7 +199,7 @@ def drawVoronoi(img, subdiv, points, peak_values) :
         area1 = ut.cv.contourArea(facet1)
         area2 = ut.cv.contourArea(facet2)
     
-        Ar = max(area1,area2)/min(area1,area2) #inutile basta prendere arr[i]
+        Ar = max(area1,area2)/min(area1,area2) 
         for k in range(len(facet1)):
             x1,y1 = facet1[k]
             x2,y2 = facet1[(k+1)%(len(facet1))]
@@ -221,7 +214,7 @@ def drawVoronoi(img, subdiv, points, peak_values) :
                 new_edges.append((i,j))
                 ut.cv.line(img_white, (x1,y1), (x2, y2), (255,255,255), 1, ut.cv.LINE_AA)
     
-    img_edges = ut.plotEdges(img,new_edges,points)  
+    img_edges = ut.plotEdges(image, new_edges, points)  
     bin_edges = pp.binarization('Otsu',img_edges)
     
     img_white = pp.binarization('Otsu',img_white)
@@ -237,17 +230,24 @@ def drawVoronoi(img, subdiv, points, peak_values) :
     return bin_edges,img_voro_full,~img_voro_segm
 
 
-def voronoi(points,img, peak_values):
+def voronoi(points, image, peak_values):
     '''
     Build Delaunay Triangulation and Voronoi Area 
     
     Parameters
     ----------
     points : array of coordinates (x,y) about the centroids.
-    img: array of image pixels. (this will be modified at the end of the method)
+    image: array of image pixels. (this will be modified at the end of the method)
+    peak_values: integer values of best two peak distances
+    
+    Returns
+    -------
+    bin_edges: array of image pixels binarized with Voronoi edges drawn 
+    img_voro_full: array of image pixels with all Voronoi cells drawn
+    img_voro_segm: array of image pixels with segmentation of Voronoi cells
     '''
-    img_voronoi = img.copy()
-    size = img.shape
+    img_voronoi = image.copy()
+    size = image.shape
     rect = (0, 0, size[1], size[0]) #creates a tuple with the origin and size of the image rectangle
     subdiv = ut.cv.Subdiv2D(rect) #creates an empty Delaunay subdivision with the rectangle size
     
@@ -255,24 +255,32 @@ def voronoi(points,img, peak_values):
         subdiv.insert(p)
         
     
-    drawDelaunay(img, subdiv, (0, 0, 255)) #draw the triangulation using Delaunay subdivision.
+    drawDelaunay(image, subdiv, (0, 0, 255)) #draw the triangulation using Delaunay subdivision.
     for p in points :
-        ut.cv.circle(img, p, 2, (255,0,0), ut.cv.FILLED, ut.cv.LINE_AA, 0 )
+        ut.cv.circle(image, p, 2, (255,0,0), ut.cv.FILLED, ut.cv.LINE_AA, 0 )
     return drawVoronoi(img_voronoi,subdiv,points,peak_values) #draw the Voronoi diagram using Delaunay subdivision.
     
     
-def docstrum(input_img, output_img, edges, points, thresh_dist):
-    points = ut.np.int32(points)
-    #ut.plt.figure(figsize=(30,20))
-    #ut.plt.imshow(input_img, 'gray')    
+def docstrum(binarized_img, edges, points, thresh_dist):
+    '''
+    Method that draw the docstrum edges
+    
+    Parameters
+    ----------
+    binarized_img: array of binarized image pixels
+    edges: array of pair points edge index (tree edges)
+    points: array of coordinates (x,y) about the centroids
+    thresh_dist: integer value of maximum peak distance
+    
+    '''
+    points = ut.np.int32(points) 
     for edge in edges:
         i,j = edge[2]
         distan = edge[1]
         
         if distan < thresh_dist:
-            ut.cv.line(output_img, (points[i, 0], points[i, 1]), (points[j, 0], points[j, 1]), (0,0,0), 3, ut.cv.LINE_AA)
-            #ut.plt.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c='r')
-    #ut.plt.show()    
+            ut.cv.line(binarized_img, (points[i, 0], points[i, 1]), (points[j, 0], points[j, 1]), (0,0,0), 3, ut.cv.LINE_AA)
+                
     
 def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
     if verticalCut:
@@ -322,10 +330,9 @@ def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
 def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
     #img_name='prova30.tif'
     #img = cv.imread(img_name, 0)
-    imgV = img_bin# cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
-    
+    imgV = img_bin
     #path = 'Users\\manus\\Desktop\\Progetto DDM\\XY_Tree'
-    
+    immagini = []
     #horizontal cut
     #imgV = cv2.imread(newName, 0)
     for i in range(len(info)-1):
@@ -350,10 +357,12 @@ def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
     
     #vertical cut
     filelist = []
+    '''
     print(path)
     path = path + new_imgname[:-21]
     print(path)
-    for infile in ut.glob.glob (ut.os.path.join (path, 'prova*_horizCrop*.tif')):
+    '''
+    for infile in ut.glob.glob (ut.os.path.join (path, '*_horizCrop*.tif')):
         filelist.append (infile)
     filelist.sort()
     print(filelist)
@@ -365,7 +374,7 @@ def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
         inf = cutImage(newRead,4,21,True)#4,21
         if len(inf)==1:
             print('NoCut')
-            title=input("Name: ")
+            title=input('Name: ')
             tree.add_child()
             tree[x].name = title
             ut.plt.title(title)
@@ -373,7 +382,8 @@ def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
         else:
             flag=False
             for h in range(len(inf)-1):
-                cropV = newRead[ 0:newRead.shape[0], inf[h][2]:inf[h+1][1] ]
+                cropV = newRead[ 0:newRead.shape[0], inf[h][2]:inf[h+1][1]]
+                immagini.append(cropV)
                 newNameV = file[:-4]+'_finalCut'+str(h)+'.tif'
                 ut.cv.imwrite(newNameV, cropV)
                 title=input("Name: ")
@@ -424,30 +434,71 @@ def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
         y=0
     
     print(tree)
+    return immagini
     #print(XY_Tree)
     #return pippo,typeNode,label
     #return typeNode,label
 
-def getTextFileFromImage(binarized_img,coordinates,path,output_file):
+def getTextFileFromImage(binarized_img, output_file, coordinates:int = []):
+    '''
+    Method used to extract text from image using coordinated to crop the interested part of the image 
+    saving the text in a new file.
+    
+    Parameters
+    ----------
+    binarized_img: array of binarized image pixels or, if coordinares array is empty, array of array binarized images
+    output_file: string about the name that will be used to create the textual file
+    coordinates: array of float coordinates (x,y,w,h) used to crop the image before the OCR use. If
+    it is empty it use directly a image array (binarized_img).
+    
+    '''
     f = open(output_file,'w')
-    for i in range(len(coordinates)):
-        [x,y,w,h] = coordinates[i]
-        f.write('------------ Section '+ str(i+1) +'------------\n')
-        croped = binarized_img[y:y+h, x:x+w].copy()
+    section = 1;
+    if coordinates == []: #method is xy tree
+        measure = binarized_img
+    else:
+        measure = coordinates
+        
+    for i in range(len(measure)):
+        if measure == []:
+            croped = measure[i]
+        else:
+            [x,y,w,h] = measure.pop()
+            croped = binarized_img[y:y+h, x:x+w].copy()
+        
         blackPixels=ut.cv.countNonZero(~croped)
         whitePixels=ut.cv.countNonZero(croped)
         perc=int((blackPixels/(whitePixels+blackPixels))*100)
-        print('number of black pixel:',perc,'%')
-        if perc<40:
+        
+        if perc<45:
             text = ut.pytesseract.image_to_string(croped)
         else:
             text = 'IMAGE'
-        ut.showImage('croped',croped)
-        print(text)
-        f.write(text+'\n')
+        
+        if text != '':
+            print('number of black pixel:',perc,'%')
+            print(text)
+            f.write('------------ Section '+ str(section) +'------------\n')
+            f.write(text+'\n')
+            section += 1
+    
     f.close()
     
-def getTextFile(path,names_file,output_file):
+def getTextFile(path, names_file, output_file):
+    '''
+    Method used to extract text from image using images stored in a folder.
+    
+    Parameters
+    ----------
+    path: string of the path where the image are stored 
+    names_file: string that represent the expression with which the images will be processed.
+    output_file: string about the name that will be used to create the textual file
+    
+    Returns
+    -------
+    f: file where the text was written
+    
+    '''
     f = open(output_file,'w')
     #path='images/XY_Tree'
     filelist = []
@@ -458,7 +509,7 @@ def getTextFile(path,names_file,output_file):
     for file in filelist:
         f.write('------------ Section '+ str(x) +'------------\n')
         img = ut.cv.imread(file)
-        img_bin=pp.binarization('otsu',img)
+        img_bin=pp.binarization('Otsu',img)
         blackPixels=ut.cv.countNonZero(~img_bin)
         whitePixels=ut.cv.countNonZero(img_bin)
         perc=int((blackPixels/(whitePixels+blackPixels))*100)

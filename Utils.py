@@ -22,34 +22,42 @@ import heapq
 import PreProcessing as pp
 import LayoutAnalysis as la
 
-def showImage(text_name, file_name):
+def showImage(text_name, image, img_name: str='', out_path: str='', write: bool=False):
     '''
-    It shows the image creating a new OpenCV window, it also write the image on a file.
+    It shows the image creating a new OpenCV window, it also write the image on a file 
+    whose extension can be specified in the constant IMAGE_EXTESION.
     
     Parameters
     ----------
     text_name : string about the file named used to show and write
-    file_name: array of image pixels to show.
+    image: array of image pixels to show.
+    img_name: string of name file that will be created (optional if you want only to show image)
+    out_path: string of the path where file will be created (optional if you want only to show image)
+    write: boolean value to enable the write function
+    
     '''
+    IMAGE_EXTESION = '.png'
     cv.namedWindow(text_name, cv.WINDOW_NORMAL)
-    cv.imshow(text_name, file_name)
-    cv.imwrite(text_name+'.tif', file_name)
+    cv.imshow(text_name, image)
+    if write:
+        cv.imwrite(out_path+img_name+ ' ' +text_name+ IMAGE_EXTESION, image)
     cv.waitKey(0)
     cv.destroyWindow(text_name)
     
 def removeFiguresOrSpots(binarized_img, mode):
     '''
-    Remove figures or spots from images, useful for making more accurate the deskew with Hough transform.
+    Remove figures,spots and lines from an image, useful for making more accurate the deskew with Hough transform and
+    for help to compute several function.
+    If the function is remove spots or lines it makes a dilatation and erosion to increase accuracy.
     
     Parameters
     ----------
     binarized_img : array of binarized image pixels.
-    original_img: array of original image pixels.
     mode : string used for selection of mode. 
 
     Returns
     -------
-    new_img : array of original image pixels without figures or spots.
+    new_img : array of original image pixels with elements removed.
     '''
     if mode != 'figures':
         kernel = np.ones((3,2), np.uint8) 
@@ -62,34 +70,34 @@ def removeFiguresOrSpots(binarized_img, mode):
     contours,_ = cv.findContours(~binarized_img, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
     
     for contour in contours:
-        [x,y,w,h] = cv.boundingRect(contour) #posso usare cv.contourArea(contour)
+        [x,y,w,h] = cv.boundingRect(contour)
+        
         if mode == 'figures':
-            if w>300 or h>300 :#remove if the box it's too big (figure) or if it's too small (spot)
+            if (w>250 or h>250):#remove if the box it's too big (figure) 
                 for i in range(y,y+h):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
         elif mode == 'spots':
-            if ((0<=w<=5) and (0<=h<=5)):  #DACONTROLLARE (RIMUOVE PUNTI)
+            if ((0<=w<=5) and (0<=h<=5)):  
                 for i in range(y,y+h):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
         elif mode == 'linesVert':
-            if h>50 and w<25:
+            if h>100 and w<30:
                 for i in range(y,y+h):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
         elif mode == 'linesHoriz':
-            if w>50 and h<25:
+            if w>100 and h<30:
                 for i in range(y,y+h):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
         elif mode == 'linesBoth':
-            if (w>50 and h<25) or (h>50 and w<25):
+            if (w>100 and h<30) or (h>100 and w<30):
                 for i in range(y,y+h):
                     for j in range(x, x+w):
                         new_img[i][j] = 255
                         
-    #showImage('gn',new_img)
     return new_img
 
 def printContours(binarized_img,output_img, thickness):
@@ -100,49 +108,69 @@ def printContours(binarized_img,output_img, thickness):
     ----------
     binarized_img : array of binarized image pixels.
     output_img: array of output image pixels. This will be modified at the end of the method.
+    thickness: integer used to choose the thickness of the rectangle lines
+    
+    Returns
+    -------
+    box_coordinates: coordinates and dimension(x,y,w,h) of all bounding boxes that respect the condition.
     '''
-    box_coordinates = []
-    #contours,_  = cv.findContours(np.uint8(np.logical_not(binarized_img)),cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
+    box_coordinates = [] 
     contours,_  = cv.findContours(~binarized_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
     for contour in contours:
         [x,y,w,h] = cv.boundingRect(contour)
         if w >= 4 and h >= 4:
             cv.rectangle(output_img, (x,y), (x+w,y+h), (0, 255, 0), thickness)
-        if w >= 100 and h >= 100:
+        if (w >= 100 and h >= 50) or (w >= 50 and h >= 100):
             box_coordinates.append([x,y,w,h])
-    box_coordinates = sorted(box_coordinates, key = lambda z:z[1])
-    box_coordinates = sorted(box_coordinates, key = lambda z:z[0])
+            
     return box_coordinates
             
-            
-            
-def findMidDistanceContour(binarized_img,vert: bool = False):
+def findMidDistanceContour(binarized_img, vertical: bool = False):
+    '''
+    Utility method of valueRLSA() to get the medium width of all CCs bounding boxes
+    
+    Parameters
+    ----------
+    binarized_img: array of image pixels binarized
+    vertical: boolean value to enable the calculation the horizontal RLSA (default = False) (optional) 
+    
+    Returns
+    -------
+    mid_value: medium  width value of all CCs bounding boxes.
+    '''
     contours,_  = cv.findContours(~binarized_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE) 
-    sumDir = 0
+    sum_dir = 0
     size = 0
     for contour in contours:
         [x,y,w,h] = cv.boundingRect(contour)
-        if vert:
-            sumDir += h
+        if vertical:
+            sum_dir += h
         else:
-            sumDir += w
+            sum_dir += w
         size += 1
-    midV = sumDir/size
-    return midV
+    mid_value = sum_dir/size
+    return mid_value
     
-
-
-
-#trova la distanza tra centroidi
-def findDistance(binarized_img, vert: bool = False):
+def findDistance(binarized_img, vertical: bool = False):
+    '''
+    Utility method of valueRLSA() to find the distances between all CCs centroids
+    
+    Parameters
+    ----------
+    binarized_img: array of image pixels binarized
+    vertical: boolean value to enable the calculation the horizontal RLSA (default = False) (optional) 
+    
+    Returns
+    -------
+    distances: array of distances between all CCs
+    '''
     points = la.findCentroids(binarized_img,binarized_img.copy())
-    
     G,edges = la.minimumSpanningTreeEdges(points,5)
     edges_dist = G.data
     edges_hor,edges_vert = edgesInformation(edges,points,edges_dist)
     distances = []
     edges = edges_hor
-    if vert:
+    if vertical:
         edges = edges_vert
     for edge in edges:
         c1,c2 = edge[2]
@@ -151,17 +179,29 @@ def findDistance(binarized_img, vert: bool = False):
         dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
         distances.append(dist)
        
-    #DA VERIFICARE MEGLIO
     for dist in distances:
         if dist > 150:
             distances.remove(dist)
     
-    
     return distances
 
 
-def histogram(binarized_img,distance,vert: bool = False):
-    w=findMidDistanceContour(binarized_img,vert)
+def histogram(binarized_img, distance, vertical: bool = False):
+    '''
+    Method used to show the distance histogram of CCs centroids in the compute of adaptive RLSA.
+    
+    Parameters
+    ----------
+    binarized_img: array of image pixels binarized
+    distance: array of distances between CCs centroids
+    vertical: boolean value to enable the show of horizontal RLSA (default = False) (optional) 
+    
+    Returns
+    -------
+    value: integer of final rounded value to perform RLSA
+    distances: array of distances between all CCs
+    '''
+    w=findMidDistanceContour(binarized_img,vertical)
     row_number = [i for i in range(len(distance))]
     distances=[]
     for j in range(len(distance)):
@@ -170,25 +210,36 @@ def histogram(binarized_img,distance,vert: bool = False):
     plt.show()        
               
     
-def rotate(img_orig,img_bin):
-    img_copy = img_orig.copy()
-    printContours(img_bin,img_copy, 1)       
+def rotate(original_img,binarized_img):
+    '''
+    Utility method used to rotate the image 
+    
+    Parameters
+    ----------
+    original_img: array of image pixels 
+    binarized_img: array of image pixels binarized
+    
+    Returns
+    -------
+    rotated_img: array of image pixels after rotation
+    '''
+    img_no_figures = removeFiguresOrSpots(binarized_img, 'figures')
+    rotated_img,_ = pp.houghTransformDeskew(img_no_figures, original_img, False)
+    return rotated_img
 
-    valueH,_= pp.valueRLSA(img_bin)
-    valueV,_ = pp.valueRLSA(img_bin,True)
+def showProjection(binarized_img, counts, row_number):
+    '''
+    Utility method used to show the projection computed in the projection() method.
     
-    img_rlsa_H = pp.rlsa(img_bin.copy(), True, False, valueH)
-    img_rlsa_full = pp.rlsa(img_rlsa_H.copy(),False,True,valueV)
+    Parameters
+    ----------
+    binarized_img: array of image pixels binarized
+    counts: integer represents number of black pixels
+    row_number: integer represent number of rows
     
-    img_no_figures = removeFiguresOrSpots(img_rlsa_full, 'figures')
-    #showImage('puppu',img_no_figures)
-    img_rotated,_ = pp.houghTransformDeskew(img_no_figures, img_orig, False)
-    return img_rotated
-
-def showProjection(img_bin, counts, row_number):
-    
+    '''
     f, (ax1,ax2)= plt.subplots(1, 2, sharey=True, figsize=(70, 20))#(70,40)
-    ax1.imshow(img_bin,'gray')
+    ax1.imshow(binarized_img,'gray')
     ax1.tick_params(axis='both', which='major', labelsize=30)
     ax2.plot(counts, row_number,label='fit')
     ax2.tick_params(axis='both', which='major', labelsize=30)
@@ -221,36 +272,95 @@ def rectContains(rect, point) :
         return False
     return True
 
-def euclidean_distance(point1, point2):
-	distance = (point2[0] - point1[0])**2 + (point2[1] - point1[1])**2
-	return math.sqrt(distance)
+def euclideanDistance(point1, point2):
+    '''
+    Calculates the euclidean distance between two points.
+    
+    Parameters
+    ----------
+    point1/2: pair of float coordinates x,y
+    
+    Returns
+    -------
+    distance: float distance value
+    '''
+    distance = (point2[0] - point1[0])**2 + (point2[1] - point1[1])**2
+    return math.sqrt(distance)
 
-def angleBetween(p1, p2):
-    dx = p2[1]-p1[1]
-    dy = p2[0]-p1[0]
+def angleBetween(point1, point2):
+    '''
+    Calculates the inclination of the line passing through two point.
+    
+    Parameters
+    ----------
+    point1/2: pair of float coordinates x,y
+    
+    Returns
+    -------
+    degrees: float inclination value
+    '''
+    dx = point2[1]-point1[1]
+    dy = point2[0]-point1[0]
     arctan = math.atan2(dx,dy)
     return math.degrees(arctan)
 
 def getAngles(edges,points):
+    '''
+    Calculates the inclination of the line passing through two point for an array of edges.
+    
+    Parameters
+    ----------
+    edges: array of pair points edge index (tree edges)
+    points: array of float pair coordinates x,y
+    
+    Returns
+    -------
+    angles: array of float angle values
+    '''
     angles = []
     for edge in edges:
-        #i, j = edge
         i,j = edge
         angles.append(angleBetween(points[i],points[j]))
     return angles
 
-def plotEdges(img, edges, points):
+def plotEdges(image, edges, points):
+    '''
+    Method that write edges on the image passed as parameter.
+    
+    Parameters
+    ----------
+    image: array of image pixels 
+    edges: array of pair points edge index (tree edges)
+    points: array of float pair coordinates x,y
+    
+    Returns
+    -------
+    output_img: array of image pixels with written edges
+    '''
     points = np.int32(points)
-    output_img = img.copy()
+    output_img = image.copy()
       
     for edge in edges:
-        
         i,j = edge
         cv.line(output_img, (points[i, 0], points[i, 1]), (points[j, 0], points[j, 1]), (0,0,0), 1, cv.LINE_AA)
-         
     return output_img
 
 def edgesInformation(edges, points, distances):
+    '''
+    Utility method used for compute docstrum. It findes from a list of edges which are horizontal 
+    and vertical usind a difference of +-20 degrees to remedy edge angle imprecision .
+    
+    Parameters
+    ----------
+    edges: array of pair points edge index (tree edges)
+    points: array of float pair coordinates x,y
+    distances: array of float values represents the distance between two points of a edge
+    
+    Returns
+    -------
+    horizontal_edges: array of pair points horizontal edge index 
+    vertical_edges: array of pair points vertical edge index 
+    '''
     angles = getAngles(edges,points)
     points = np.int32(points)
 
@@ -267,21 +377,46 @@ def edgesInformation(edges, points, distances):
     
     return horizontal_edges,vertical_edges
 
-def polyArea(x,y):
-    return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
 
 def counterClockwise(A,B,C):
+    '''
+    Utility method of intersect()
+    '''
     return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
 
-# Return true if line segments AB and CD intersect
+
 def intersect(A,B,C,D):
+    '''
+    Method used to check intersection between two lines
+    
+    Parameters
+    ----------
+    A,B: points of the first line
+    C,D: points of the second line
+    
+    Returns
+    -------
+    intersect: boolean value about intersection
+    '''
     return counterClockwise(A,C,D) != counterClockwise(B,C,D) and counterClockwise(A,B,C) != counterClockwise(A,B,D)  
 
 
-def findPeaks(k_kneighbors_distances, distance: int=0, plot: bool=False):
+def findPeaks(distances, distance: int=0, plot: bool=False):
+    '''
+    Utility method used to find the two distances most present. 
+    
+    Parameters
+    ----------
+    distances: array of float values represents the distance between two points of a edge
+    distance: integer value used as distance between the first and the second peak (optional)
+    plot: boolean value used to enable peak histogram plot.
+    Returns
+    -------
+    peak_values: integer values of best two peak distances
+    '''
     d = defaultdict(int)
     
-    for k in k_kneighbors_distances:
+    for k in distances:
         k = round(k)
         d[k] += 1
         
@@ -296,40 +431,38 @@ def findPeaks(k_kneighbors_distances, distance: int=0, plot: bool=False):
     x = np.array(values)
     y = np.array(occurrences)
     
-    # orina i dati dal valore più grande al valore piu piccolo(sia rispetto a x sia rispetto a y)
-    # x = [8, 3, 5] diventa x = [3, 5, 8]
-    sortId = np.argsort(x)
-    x = x[sortId]
-    y = y[sortId]
+    sort_id = np.argsort(x)
+    x = x[sort_id]
+    y = y[sort_id]
 
-    #Trovo i punti di ottimo locale
+    #findo optimum local points 
     if(distance!=0):
         peaks, _ = find_peaks(y, distance= distance)
     else:
         peaks, _ = find_peaks(y)
 
 
-    peaksOccurrenceList=[]
-    peaksOccurrences=[]
+    peaks_occurrence_list=[]
+    peaks_occurrences=[]
     for i in range(len(peaks)):
-        peaksOccurrences.append(y[peaks[i]])
-        peaksOccurrenceList.append((x[peaks[i]],y[peaks[i]]))
-    peaksOccurrenceList = sorted(peaksOccurrenceList, key = lambda x:x[1], reverse=True)
+        peaks_occurrences.append(y[peaks[i]])
+        peaks_occurrence_list.append((x[peaks[i]],y[peaks[i]]))
+    peaks_occurrence_list = sorted(peaks_occurrence_list, key = lambda x:x[1], reverse=True)
     
-    #Trova i DUE picchi piu alti 
-    bestPeaks=heapq.nlargest(2, peaksOccurrences)
-
-
-    my_Peak_Value=[]
-    for k in range(len(peaksOccurrenceList)):
-        if bestPeaks[0]==peaksOccurrenceList[k][1] or bestPeaks[1]==peaksOccurrenceList[k][1]:
-            my_Peak_Value.append(int(peaksOccurrenceList[k][0]))  
+    #finds the two higher peaks
+    best_peaks=heapq.nlargest(2, peaks_occurrences)
     
+
+    peak_values=[]
+    for k in range(len(peaks_occurrence_list)):
+        if len(peak_values)<2 and (best_peaks[0]==peaks_occurrence_list[k][1] or best_peaks[1]==peaks_occurrence_list[k][1]):
+            peak_values.append(int(peaks_occurrence_list[k][0]))  
+    print('vest peaks', best_peaks, 'my peak', peak_values)
     
     if plot:
         plt.plot(x, y)
-        plt.plot(my_Peak_Value, bestPeaks, "x")
+        plt.plot(peak_values, best_peaks, "x")
         plt.xlim(0, 80)
         plt.show()
-        print('Peak values for this image are',my_Peak_Value)
-    return my_Peak_Value
+        print('Peak values for this image are',peak_values)
+    return peak_values
