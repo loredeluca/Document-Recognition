@@ -1,6 +1,7 @@
 import Utils as ut
 import PreProcessing as pp
-#ATTENTION use this part of code if you have problems with the library igraph---------------------------------------------------
+from igraph import Graph, EdgeSeq
+#ATTENTION use the class Node if you have problems with the library igraph---------------------------------------------------
 #You have to comment and uncommend some part of the code in the method cut_matrix()
 import itertools
 import operator
@@ -283,13 +284,27 @@ def docstrum(binarized_img, edges, points, thresh_dist):
                 
     
 def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
+    '''
+       Evaluates where the image can be cut
+       
+       Parameters
+       ----------
+       img_bin: array of binarized image pixels
+       nPixel : integer value of the threshold of black pixels below which it is         possible to make a cut
+       space: integer value of the threshold of consecutive white pixels not to be     cut
+       verticalCut : boolean value to rotate the image to evaluate vertical cuts (default = True) (optional)
+       
+       Returns
+       info: triplet array [nWhitePixel,pStart, pEnd], nWhitePixel indicates the number of consecutive white pixels, pStart indicates the first white pixel, pEnd indicates the last white pixel
+       
+       '''
     if verticalCut:
         image_bin = image_bin.T
         
     #Counting black pixels per row (axis=0: col, axis=1:row)
     counts,_ = pp.projection(image_bin)
 
-    #cut contiene tutte le righe che hanno meno di nPixel pixel
+    #cut contains all lines that have less than nPixel pixels
     cut=[]
     for i in range(counts.shape[0]):
         if(counts[i]<nPixel):
@@ -316,7 +331,7 @@ def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
             delete.append(k)
     for m in range(len(delete)-1,-1,-1):
         info.remove(info[delete[m]])
-    #print('[[nPixel,pStart, pEnd]]:',info)
+    #print('[[nWhitePixel,pStart, pEnd]]:',info)
     
     if verticalCut:
         image_bin = image_bin.T
@@ -328,116 +343,111 @@ def cutImage(image_bin,nPixel,space,verticalCut: bool = False):
 
 
 def cutMatrix(img_name, path, img_bin, info, infoV, XY_Tree):
-    #img_name='prova30.tif'
-    #img = cv.imread(img_name, 0)
+    '''
+    Cut the image into blocks
+    
+    Parameters
+    ----------
+    img_name : image name string with extension
+    path : path to save the cut images
+    img_bin : array of binarized image pixels
+    info : indicates where you can crop the image horizontally
+    info : indicates where you can crop the image vertically
+    XY_Tree : the root of tree created with igraph
+    
+    Returns
+    XY_Tree : full xy tree
+    typeNode : indicates the type of xy tree node (root, leaf or node)
+    label : indicates the name of the node
+    
+    '''
     imgV = img_bin
-    #path = 'Users\\manus\\Desktop\\Progetto DDM\\XY_Tree'
-    immagini = []
-    #horizontal cut
-    #imgV = cv2.imread(newName, 0)
     for i in range(len(info)-1):
         crop_img = imgV[info[i][2]:info[i+1][1],0:imgV.shape[1]]
         new_imgname=img_name[:-4]+'_horizCrop'+str(i)+'.tif'
-        #showImage('oo',crop_img)
-        ut.cv.imwrite(path + new_imgname,crop_img)
-        #cv2.imwrite(new_imgname, crop_img)
-        #plt.imshow(crop_img, 'gray'),plt.show()
-    tree = Node()
-    tree.name = 'Page(root)'
-    '''
-    typeNode =[]
-    label=[]
+        ut.cv.imwrite(ut.os.path.join(path , new_imgname),crop_img)
     
-    XY_Tree.add_vertices(1)
-    label.append('Pg')
-    typeNode.append('root')
+    #If you have problems with igraph, uncomment the lines starting with '#' and comment the lines ending with '#'
+    #tree = Node()
+    #tree.name = 'Page(root)'
     
-    XY_Tree_Node=0
-    '''
+    typeNode =[]#
+    label=[]#
+    
+    XY_Tree.add_vertices(1)#
+    label.append('Pg')#
+    typeNode.append('root')#
+    XY_Tree_Node=0#
     
     #vertical cut
     filelist = []
-    '''
-    print(path)
-    path = path + new_imgname[:-21]
-    print(path)
-    '''
     for infile in ut.glob.glob (ut.os.path.join (path, '*_horizCrop*.tif')):
         filelist.append (infile)
     filelist.sort()
-    print(filelist)
-    x=0
-    y=0
+    #x=0
+    #y=0
     
     for file in filelist:
         newRead = ut.cv.imread(file, 0)
-        inf = cutImage(newRead,4,21,True)#4,21
+        inf = cutImage(newRead,4,21,True)
         if len(inf)==1:
             print('NoCut')
             title=input('Name: ')
-            tree.add_child()
-            tree[x].name = title
+            #tree.add_child()
+            #tree[x].name = title
             ut.plt.title(title)
             ut.plt.imshow(newRead, 'gray'),ut.plt.axis('off'),ut.plt.show()
         else:
             flag=False
             for h in range(len(inf)-1):
                 cropV = newRead[ 0:newRead.shape[0], inf[h][2]:inf[h+1][1]]
-                immagini.append(cropV)
                 newNameV = file[:-4]+'_finalCut'+str(h)+'.tif'
                 ut.cv.imwrite(newNameV, cropV)
                 title=input("Name: ")
-                #XY_Tree_Node += 1
+                XY_Tree_Node += 1#
                 if len(inf)<=2:
-                    #XY_Tree.add_vertices(1)
-                    #label.append(title)
-                    #typeNode.append('leaf')
-                    #XY_Tree.add_edges ([(0,XY_Tree_Node)])
-                    tree.add_child()
-                    tree[x].name = title
-                    x=x+1
-                elif flag==False:
-                    tree.add_child()
-                    print('x,y',x,y)
-                    tree[x].name = 'O'
-                    tree[x].add_child()
-                    tree[x][y].name = title
-                    '''
-                    XY_Tree.add_vertices(1)
-                    label.append(' ')
-                    typeNode.append('node')
-                    XY_Tree.add_edges ([(0,XY_Tree_Node)])
-                    XY_Tree.add_vertices(1)
-                    label.append(title)
-                    typeNode.append('leaf')
-                    count = 0
-                    XY_Tree.add_edges ([(XY_Tree_Node,XY_Tree_Node+1)])
-                    '''
-                    flag=True
+                    XY_Tree.add_vertices(1)#
+                    label.append(title)#
+                    typeNode.append('leaf')#
+                    XY_Tree.add_edges ([(0,XY_Tree_Node)])#
+                    #tree.add_child()
+                    #tree[x].name = title
                     #x=x+1
-                    
+                elif flag==False:
+                    #tree.add_child()
+                    #tree[x].name = 'O'
+                    #tree[x].add_child()
+                    #tree[x][y].name = title
+                    XY_Tree.add_vertices(1)#
+                    label.append(' ')#
+                    typeNode.append('node')#
+                    XY_Tree.add_edges ([(0,XY_Tree_Node)])#
+                    XY_Tree.add_vertices(1)#
+                    label.append(title)#
+                    typeNode.append('leaf')#
+                    count = 0#
+                    XY_Tree.add_edges ([(XY_Tree_Node,XY_Tree_Node+1)])#
+                    #x=x+1
+                    flag=True
                 else:
-                    tree[x-1].add_child()
-                    tree[x-1][y].name = title
-                    '''
-                    XY_Tree.add_vertices(1)
-                    label.append(title)
-                    typeNode.append('leaf')
-                    count += 1
-                    XY_Tree_Node += 1
-                    XY_Tree.add_edges ([(XY_Tree_Node-2*count,XY_Tree_Node-count+1)])
-                    '''
-                y=y+1
-                flag=False
+                    #tree[x-1].add_child()
+                    #tree[x-1][y].name = title
+                    XY_Tree.add_vertices(1)#
+                    label.append(title)#
+                    typeNode.append('leaf')#
+                    count += 1#
+                    XY_Tree_Node += 1#
+                    XY_Tree.add_edges([(XY_Tree_Node-2*count,XY_Tree_Node-count+1)])#
+                #y=y+1
+                #flag=False
                 ut.plt.title(title)
                 ut.plt.imshow(cropV, 'gray'),ut.plt.axis('off'), ut.plt.show()
-        y=0
+        #y=0
     
-    print(tree)
-    return immagini
-    #print(XY_Tree)
-    #return pippo,typeNode,label
+    #print(tree)
+    print(XY_Tree)#
     #return typeNode,label
+    return XY_Tree,typeNode,label
 
 def getTextFileFromImage(binarized_img, output_file, coordinates:int = []):
     '''

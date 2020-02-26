@@ -16,7 +16,8 @@ from collections import defaultdict
 from scipy.signal import find_peaks
 from PIL import Image
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+#Use this string on Windows OS
+#pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 import argparse
 import heapq
 import PreProcessing as pp
@@ -457,7 +458,7 @@ def findPeaks(distances, distance: int=0, plot: bool=False):
     for k in range(len(peaks_occurrence_list)):
         if len(peak_values)<2 and (best_peaks[0]==peaks_occurrence_list[k][1] or best_peaks[1]==peaks_occurrence_list[k][1]):
             peak_values.append(int(peaks_occurrence_list[k][0]))  
-    print('vest peaks', best_peaks, 'my peak', peak_values)
+    #print('best peaks', best_peaks, 'my peak', peak_values)
     
     if plot:
         plt.plot(x, y)
