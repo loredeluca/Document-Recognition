@@ -10,8 +10,8 @@ def main():
         
     #if you want to show every step result on a OpenCV window and write it on a .tif file
     SHOWSTEPS_AND_WRITE_RESULTS = True 
-    BINARIZATION_METHOD = 'inverse' # or 'otsu','inverse'
-    PAGE_SEGMENTATION_METHOD = 'Voronoi' #or 'docstrum', 'Voronoi', 'xy tree'
+    BINARIZATION_METHOD = 'Sauvola' # or 'otsu','inverse'
+    PAGE_SEGMENTATION_METHOD = 'mst' #or 'docstrum', 'Voronoi', 'xy tree'
     
     
     #read dataset and put it in an array
@@ -84,7 +84,7 @@ def main():
     
         img_word = img.copy()
         ut.printContours(bin_rlsa,img_word,1)
-    
+        
         '''
         LAYOUT ANALYSIS-----------------------------------------------------
         '''
@@ -93,7 +93,7 @@ def main():
         k_kneighbors_edges = ut.np.array(Graph.nonzero()).T
         k_kneighbors_distances = Graph.data
         my_Peak_Values = ut.findPeaks(k_kneighbors_distances,20,True)
-    
+        
         if PAGE_SEGMENTATION_METHOD == 'mst':
             _,mst_edges= la.minimumSpanningTreeEdges(points,5,my_Peak_Values)
             img_mst= ut.plotEdges(img,mst_edges,points)
@@ -137,12 +137,12 @@ def main():
         if SHOWSTEPS_AND_WRITE_RESULTS:
         
             
-            ut.showImage('Original Image',img,img_name[:-4],output_path,write=True)
+            ut.showImage('Original Image',img_orig,img_name[:-4],output_path,write=True)
             name = BINARIZATION_METHOD + ' Binarization'
-            ut.showImage(name,binarization,img_name[:-4],output_path,write=True)
             ut.showImage('Rotated Image',img_rotated,img_name[:-4],output_path,write=True)
+            ut.showImage(name,binarization,img_name[:-4],output_path,write=True)
             ut.showProjection(binarization,counts_proj,row_number_proj)
-            ut.showImage('Image Without Figures',img_no_figures,img_name[:-4],output_path,write=True)#da eliminare
+            ut.showImage('Image Without Figures',img_no_figures,img_name[:-4],output_path,write=True)
             ut.showImage('Image Without Spots',img_no_spots,img_name[:-4],output_path,write=True)
             ut.showImage('Image Without Lines',bin_no_lines,img_name[:-4],output_path,write=True)
             ut.showImage('Centroids of Connected Components',img_centroids,img_name[:-4],output_path,write=True)
@@ -156,7 +156,7 @@ def main():
                 ut.showImage('Minimun Spanning Tree Edges Blocks',img_mst_blocks,img_name[:-4],output_path,write=True)
             if PAGE_SEGMENTATION_METHOD == 'docstrum':
                 ut.showImage('K-Nearest Neighbors Lines',bin_docstrum_lines,img_name[:-4],output_path,write=True) 
-                ut.showImage('Docstrum lines',img_docstrum_lines,write=True)
+                ut.showImage('Docstrum lines',img_docstrum_lines,img_name[:-4],output_path,write=True)
                 ut.showImage('K-Nearest Neighbors blocks',bin_docstrum_blocks,img_name[:-4],output_path,write=True) 
                 ut.showImage('Docstrum blocks',img_docstrum_blocks,img_name[:-4],output_path,write=True)
             if PAGE_SEGMENTATION_METHOD == 'Voronoi':
@@ -164,8 +164,6 @@ def main():
                 ut.showImage('Voronoi Edges',bin_voro_edges,img_name[:-4],output_path,write=True)
                 ut.showImage('Voronoi Diagram',img_voro_full,img_name[:-4],output_path,write=True)
                 ut.showImage('Voronoi Diagram Segmented',img_voro_segmentation,img_name[:-4],output_path,write=True)
-            
-    
     
     
 
